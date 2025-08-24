@@ -9,8 +9,8 @@
   // ────────────────────────────────────────────────────────────
   // Settings
   // ────────────────────────────────────────────────────────────
-  const PLUGIN_VERSION = 'v1.0'; 
-  const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git'; // Sett inn din GitHub URL her
+  const PLUGIN_VERSION = 'v1.1'; 
+  const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
   const MOBILE_BREAKPOINT = 769;
   const INACTIVE_RDS_OPACITY = '0.4';
@@ -32,14 +32,38 @@
   const CORNER_RADIUS = 2;
   const FALL_SPEED = 120;
   const NOISE_GATE_THRESHOLD = 1.0;
-  
-  const EQ_THEMES = [
-    { name: 'Classic', colors: ['#00ff00', '#ffff00', '#ff0000'] },
-    { name: 'Ocean',   colors: ['#00ffff', '#0088ff'] },
-    { name: 'Fire',    colors: ['#ffff00', '#ff8800', '#ff0000'] },
-    { name: 'Matrix',  colors: ['#004400', '#00ff00'] },
-    { name: 'Synth',   colors: ['#ff00ff', '#00ffff'] }
+
+  const PEAK_HOLD_TIME = 500;
+  const PEAK_FALL_SPEED = 50;
+  const PEAK_BAR_HEIGHT = 2;
+
+const EQ_THEMES = [
+
+    { name: 'Server Themecolor',  colors: [] },
+
+    { name: 'Red',    colors: ['#ff3b30'] },
+    { name: 'Orange', colors: ['#ff9500'] },
+    { name: 'Yellow', colors: ['#ffcc00'] },
+    { name: 'Green',  colors: ['#34c759'] },
+    { name: 'Mint',   colors: ['#63E6BE'] },
+    { name: 'Teal',   colors: ['#5ac8fa'] },
+    { name: 'Blue',   colors: ['#007aff'] },
+    { name: 'Indigo', colors: ['#5856d6'] },
+    { name: 'Pink',   colors: ['#ff2d55'] },
+    { name: 'White',  colors: ['#ffffff'] },
+    
+    { name: 'Sunset',   colors: ['#FFD166', '#EF476F', '#8338EC'] },
+    { name: 'Oceanic',  colors: ['#48BFE3', '#5390D9', '#64DFDF'] },
+    { name: 'Synthwave',colors: ['#F72585', '#7209B7', '#3A0CA3'] },
+    { name: 'Forest',   colors: ['#9EF01A', '#38B000', '#004B23'] },
+    { name: 'Inferno',  colors: ['#FEE440', '#F15152', '#D80032'] },
+    { name: 'Galaxy',   colors: ['#1D2D50', '#6C4AB6', '#B931FC'] },
+    { name: 'Rainbow',  colors: ['#d90429', '#ffc300', '#0077b6'] },
+    { name: 'Glacier',  colors: ['#FFFFFF', '#A2D2FF'] },
+    { name: 'Jungle',   colors: ['#55A630', '#F3DE2C'] },
+    { name: 'Lava',     colors: ['#540B0E', '#E07A5F'] }
   ];
+
   let currentThemeIndex = 0;
   
   const FFT_SIZES = {
@@ -53,6 +77,9 @@
   let SENSITIVITY = SENSITIVITY_DEFAULT;
   let audioContext, analyser, dataArray;
   let eqCanvas, eqCtx;
+  let showPeakMeter = true;
+  let peakHeights = [];
+  let peakHoldTimers = [];
   let currentBarHeights = [];
   let animationFrameId = null;
   let lastFrameTime = 0;
@@ -88,6 +115,8 @@
     currentThemeIndex = parseInt(localStorage.getItem('visualeqThemeIndex') || '0', 10);
     currentFftSize = parseInt(localStorage.getItem('visualeqFftSize') || FFT_SIZES.Medium, 10);
     SENSITIVITY = parseFloat(localStorage.getItem('visualeqSensitivity') || SENSITIVITY_DEFAULT);
+
+	showPeakMeter = localStorage.getItem('visualeqShowPeak') === 'true';
 
     const styleTag = document.createElement('style');
     styleTag.innerHTML = `
@@ -174,80 +203,232 @@
 
   function createSettingsModal() {
     if (document.getElementById('fmdx-settings-modal-overlay')) return;
-
-    let textColor = getComputedStyle(document.documentElement).getPropertyValue('--regular-text-color').trim() || 'white';
-    let borderColor = getComputedStyle(document.documentElement).getPropertyValue('--container-border-color').trim() || 'white';
-    let bgColor = getComputedStyle(document.documentElement).getPropertyValue('--container-background-color').trim() || 'rgba(30,30,30,0.95)';
-    let bodyBg = getComputedStyle(document.documentElement).getPropertyValue('--body-background-color').trim() || '#333';
+    const modalStyles = document.createElement('style');
+    modalStyles.innerHTML = `
+      #visualeq-sensitivity-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 6px;
+        background: var(--color-2, #555);
+        border-radius: 3px;
+        outline: none;
+        padding: 0;
+        margin-top: 0.6em;
+      }
+      #visualeq-sensitivity-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        background: var(--color-4, #E6C269);
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid var(--color-1, #111);
+        transition: transform 0.2s ease;
+      }
+      #visualeq-sensitivity-slider::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        background: var(--color-4, #E6C269);
+        border-radius: 50%;
+        cursor: pointer;
+        border: 2px solid var(--color-1, #111);
+        transition: transform 0.2s ease;
+      }
+      #visualeq-sensitivity-slider:hover::-webkit-slider-thumb {
+        transform: scale(1.1);
+      }
+      #visualeq-sensitivity-slider:hover::-moz-range-thumb {
+        transform: scale(1.1);
+      }
+      .visualeq-modal-content {
+        background: var(--color-0, #121010);
+        color: var(--color-3, #FFF);
+        border: 1px solid var(--color-2, #333);
+      }
+      .visualeq-modal-content .header {
+        background: var(--color-1, #2A2A2A);
+        padding: 20px 25px;
+        border-bottom: 1px solid var(--color-1, #333);
+      }
+      .visualeq-modal-content h2 {
+        color: var(--color-3, #FFF);
+        font-size: 1.5em;
+        margin: 0;
+      }
+      .visualeq-modal-content .header a {
+        color: var(--color-3, #FFF);
+        opacity: 0.6;
+      }
+      .visualeq-modal-content select {
+        width: 100%;
+        padding: 0.8em;
+        background: var(--color-2, #333);
+        color: var(--color-3, #FFF);
+        border: 1px solid var(--color-1, #444);
+        border-radius: 4px;
+        font-size: 1em;
+      }
+      .visualeq-modal-content label {
+        display: block;
+        margin-bottom: 0.6em;
+        font-weight: bold;
+        color: var(--color-4, #E6C269); /* Accent color for labels */
+        text-transform: uppercase;
+        font-size: 0.9em;
+      }
+      .visualeq-modal-content .help-section hr {
+         border: none; 
+         border-top: 1px solid var(--color-2, #444);
+         opacity: 0.8; 
+         margin: 2em 0;
+      }
+       .visualeq-modal-content .help-section p {
+        color: var(--color-3, #FFF);
+        opacity: 0.8;
+       }
+      #fmdx-modal-close-visualeq {
+        background: var(--color-2, rgba(255,255,255,0.1));
+        color: var(--color-3, #FFF);
+        transition: background-color 0.2s, transform 0.2s;
+      }
+      #fmdx-modal-close-visualeq:hover {
+        background: var(--color-4, #E6C269);
+        color: var(--color-1, #111);
+        transform: rotate(90deg);
+      }
+      .visualeq-checkbox-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 1.5em;
+        padding: 0.8em;
+        background-color: var(--color-2, #2A2A2A);
+        border-radius: 4px;
+        border: 1px solid var(--color-1, #444);
+      }
+      .visualeq-checkbox-container label {
+        color: var(--color-4, #E6C269);
+        text-transform: uppercase;
+        font-size: 0.9em;
+        margin-bottom: 0;
+      }
+      .visualeq-switch {
+        position: relative;
+        display: inline-block;
+        width: 44px;
+        height: 24px;
+      }
+      .visualeq-switch input { display: none; }
+      .visualeq-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: var(--color-1, #ccc);
+        transition: .4s;
+        border-radius: 24px;
+      }
+      .visualeq-slider:before {
+        position: absolute;
+        content: "";
+        height: 18px; width: 18px;
+        left: 3px; bottom: 3px;
+        background-color: white;
+        transition: .4s;
+        border-radius: 50%;
+      }
+      input:checked + .visualeq-slider {
+        background-color: var(--color-4, #2196F3);
+      }
+      input:checked + .visualeq-slider:before {
+        transform: translateX(20px);
+      }
+    `;
+    document.head.appendChild(modalStyles);
 
     const modalOverlay = document.createElement('div');
     modalOverlay.id = 'fmdx-settings-modal-overlay';
     forceStyle(modalOverlay, { display: 'none', position: 'fixed', top: '0', left: '0', width: '100%', height: '100%', backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: '9999' });
 
     const modalContent = document.createElement('div');
+    modalContent.className = 'visualeq-modal-content';
     forceStyle(modalContent, {
         position: 'absolute', top: MODAL_TOP_POSITION, left: MODAL_LEFT_POSITION,
-        transform: 'translate(-50%, -50%)', background: bgColor,
-        border: `1px solid ${borderColor}`, padding: '0', borderRadius: '8px',
-        width: '340px', height: '480px', display: 'flex', flexDirection: 'column',
+        transform: 'translate(-50%, -50%)', 
+        padding: '0', borderRadius: '8px',
+        width: '340px', height: '340px',
+        display: 'flex', flexDirection: 'column',
         overflow: 'hidden', fontSize: `calc(1rem * ${MODAL_TEXT_SCALE})`
     });
     
     const header = document.createElement('div');
-    // HER ER ENDRINGEN: <p> er byttet ut med <a>
+    header.className = 'header';
     header.innerHTML = `
       <div>
-        <h2 style="margin: 0; color: ${textColor}; font-size: 1.5em;">EQ Settings</h2>
-        <a href="${GITHUB_URL}" target="_blank" style="text-decoration: none; color: inherit; cursor: pointer;">
-          <p style="margin: 4px 0 0; color: ${textColor}; font-size: 0.9em; opacity: 0.6;">VisualEQ ${PLUGIN_VERSION}</p>
+        <h2>EQ Settings</h2>
+        <a href="${GITHUB_URL}" target="_blank" style="text-decoration: none; cursor: pointer;">
+          <p style="margin: 4px 0 0; font-size: 0.9em;">VisualEQ ${PLUGIN_VERSION}</p>
         </a>
       </div>`;
-    forceStyle(header, { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 25px', borderBottom: `1px solid ${borderColor}`, flexShrink: '0' });
-
+    
     const closeButton = document.createElement('button');
-    closeButton.id = 'fmdx-modal-close';
+    closeButton.id = 'fmdx-modal-close-visualeq';
     closeButton.innerHTML = '&times;';
     forceStyle(closeButton, {
-        position: 'absolute', top: '10px', right: '10px',
-        background: 'rgba(255,255,255,0.1)', border: 'none',
-        color: textColor, cursor: 'pointer', borderRadius: '50%',
+        position: 'absolute', top: '15px', right: '15px',
+        border: 'none', cursor: 'pointer', borderRadius: '50%',
         width: '30px', height: '30px', fontSize: '1.8em',
         lineHeight: '30px', padding: '0', display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        transition: 'background-color 0.2s'
+        alignItems: 'center', justifyContent: 'center'
     });
     
     const scrollableArea = document.createElement('div');
-    forceStyle(scrollableArea, { overflowY: 'auto', padding: '20px 25px', flex: '1 1 auto' });
+    forceStyle(scrollableArea, { overflowY: 'auto', padding: '25px', flex: '1 1 auto' });
     
     const themeSelect = document.createElement('select');
     EQ_THEMES.forEach((theme, index) => themeSelect.innerHTML += `<option value="${index}" ${index === currentThemeIndex ? 'selected' : ''}>${theme.name}</option>`);
-    forceStyle(themeSelect, { width: '100%', padding: '0.6em', background: bodyBg, color: textColor, border: `1px solid ${borderColor}`, borderRadius: '4px', fontSize: '1em' });
     themeSelect.onchange = () => { currentThemeIndex = parseInt(themeSelect.value, 10); localStorage.setItem('visualeqThemeIndex', currentThemeIndex); };
     
     const qualitySelect = document.createElement('select');
     Object.keys(FFT_SIZES).forEach(key => qualitySelect.innerHTML += `<option value="${FFT_SIZES[key]}" ${FFT_SIZES[key] === currentFftSize ? 'selected' : ''}>${key}</option>`);
-    forceStyle(qualitySelect, { width: '100%', padding: '0.6em', background: bodyBg, color: textColor, border: `1px solid ${borderColor}`, borderRadius: '4px', fontSize: '1em' });
     qualitySelect.onchange = () => { currentFftSize = parseInt(qualitySelect.value, 10); localStorage.setItem('visualeqFftSize', currentFftSize); startOrRestartEQ(); };
     
     const sensitivitySlider = document.createElement('input');
+    sensitivitySlider.id = 'visualeq-sensitivity-slider';
     Object.assign(sensitivitySlider, { type: 'range', min: SENSITIVITY_MIN, max: SENSITIVITY_MAX, step: 0.1, value: SENSITIVITY });
-    forceStyle(sensitivitySlider, { width: '100%', marginTop: '0.6em' });
     
+    const peakMeterToggle = document.createElement('input');
+    Object.assign(peakMeterToggle, { type: 'checkbox', id: 'visualeq-peak-toggle', checked: showPeakMeter });
+    
+    const peakMeterContainer = document.createElement('div');
+    peakMeterContainer.className = 'visualeq-checkbox-container';
+    peakMeterContainer.innerHTML = `
+      <label for="visualeq-peak-toggle">Show Peak Meter</label>
+      <label class="visualeq-switch">
+        <input type="checkbox" id="visualeq-peak-toggle-input" ${showPeakMeter ? 'checked' : ''}>
+        <span class="visualeq-slider"></span>
+      </label>`;
+      
+    peakMeterContainer.querySelector('#visualeq-peak-toggle-input').onchange = (e) => {
+        showPeakMeter = e.target.checked;
+        localStorage.setItem('visualeqShowPeak', showPeakMeter);
+    };
+
     const helpSection = document.createElement('div');
+    helpSection.className = 'help-section';
     helpSection.innerHTML = `
-        <hr style="border: none; border-top: 1px solid ${borderColor}; opacity: 0.5; margin: 2em 0;">
-        <h4 style="margin: 0 0 0.8em 0; font-size: 1.2em;">Help</h4>
-        <p style="margin: 0.8em 0; font-size: 1em; opacity: 0.8;"><strong>Sensitivity:</strong> Controls the vertical amplification of the bars.</p>
-        <p style="margin: 0.8em 0; font-size: 1em; opacity: 0.8;"><strong>Analyser Quality:</strong> Higher values provide more detail but may use more CPU. 'OFF' disables the visualizer.</p>
-        <p style="margin: 0.8em 0; font-size: 1em; opacity: 0.8;"><strong>Theme:</strong> Changes the color scheme of the audio visualizer.</p>
+        <hr>
+        <h4 style="margin: 0 0 0.8em 0; font-size: 1.2em; color: var(--color-3);">Help</h4>
+        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Sensitivity:</strong> Controls the vertical amplification of the bars.</p>
+        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Analyser Quality:</strong> Higher values provide more detail but may use more CPU. 'OFF' disables the visualizer.</p>
+        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Theme:</strong> Changes the color scheme of the audio visualizer.</p>
     `;
 
     const createControlSection = (label, controlElement, marginTop = '0') => {
         const container = document.createElement('div');
         const labelEl = document.createElement('label');
         labelEl.innerHTML = label;
-        forceStyle(labelEl, { display: 'block', marginBottom: '0.6em', fontWeight: 'bold' });
         forceStyle(container, { marginTop });
         container.append(labelEl, controlElement);
         return container;
@@ -256,7 +437,6 @@
     const sensLabelEl = document.createElement('label');
     sensLabelEl.htmlFor = 'sensitivity';
     sensLabelEl.innerHTML = `Sensitivity <span>(${SENSITIVITY.toFixed(1)})</span>`;
-    forceStyle(sensLabelEl, { display: 'block', marginBottom: '0.6em', fontWeight: 'bold' });
     sensitivitySlider.oninput = () => {
         SENSITIVITY = parseFloat(sensitivitySlider.value);
         sensLabelEl.querySelector('span').textContent = `(${SENSITIVITY.toFixed(1)})`;
@@ -270,6 +450,7 @@
     scrollableArea.append(
         createControlSection('Theme', themeSelect),
         createControlSection('Analyser Quality', qualitySelect, '1.5em'),
+		peakMeterContainer,
         sensitivityContainer,
         helpSection
     );
@@ -294,13 +475,21 @@
     eqCtx.fillText("Standby", eqCanvas.width / 2, eqCanvas.height / 2);
   }
 
-  function startOrRestartEQ() {
+function startOrRestartEQ() {
+    if (currentFftSize === FFT_SIZES.OFF) {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+      showStandbyText();
+      return;
+    }
+    
+    if (typeof Stream === 'undefined' || !Stream.Fallback?.Player?.Amplification) {
+      setTimeout(startOrRestartEQ, 500); 
+      return; 
+    }
+
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
-
-    if (currentFftSize === FFT_SIZES.OFF) { showStandbyText(); return; }
-    
-    if (typeof Stream === 'undefined' || !Stream.Fallback?.Player?.Amplification) { setTimeout(startOrRestartEQ, 500); return; }
     
     audioContext = Stream.Fallback.Audio;
     if (audioContext.state === 'suspended') audioContext.resume();
@@ -312,7 +501,11 @@
     Object.assign(analyser, { fftSize: currentFftSize, smoothingTimeConstant: 0.6 });
     dataArray = new Uint8Array(analyser.frequencyBinCount);
     
-    if (currentBarHeights.length === 0) currentBarHeights = new Array(20).fill(0);
+	if (currentBarHeights.length === 0) {
+      currentBarHeights = new Array(20).fill(0);
+      peakHeights = new Array(20).fill(0);
+      peakHoldTimers = new Array(20).fill(0);
+    }
     
     liveAudioPlayer.Amplification.connect(analyser);
     lastFrameTime = performance.now();
@@ -332,7 +525,6 @@
   
   function drawEQ(currentTime) {
     if (!analyser || audioContext.state !== 'running') {
-        // La animasjonen fortsette å falle selv om context ikke kjører
         if (currentBarHeights.every(h => h === 0)) {
             animationFrameId = null;
             return;
@@ -353,9 +545,21 @@
     const barWidth = (totalDrawingWidth - (BAR_SPACING * (bandRanges.length - 1))) / bandRanges.length;
     
     const activeTheme = EQ_THEMES[currentThemeIndex];
-    const gradient = eqCtx.createLinearGradient(0, eqCanvas.height, 0, 0);
-    activeTheme.colors.forEach((color, i) => gradient.addColorStop(i / (activeTheme.colors.length - 1) || 1, color));
-    eqCtx.fillStyle = gradient;
+    
+    let fillStyle;
+    if (activeTheme.name === 'Server') {
+        const serverColor = getComputedStyle(document.documentElement).getPropertyValue('--color-4').trim();
+        fillStyle = serverColor || '#00ff00';
+    } else if (activeTheme.colors.length === 1) {
+        fillStyle = activeTheme.colors[0];
+    } else {
+        const gradient = eqCtx.createLinearGradient(0, eqCanvas.height, 0, 0);
+        activeTheme.colors.forEach((color, i) => {
+            const position = i / (activeTheme.colors.length - 1);
+            gradient.addColorStop(position, color);
+        });
+        fillStyle = gradient;
+    }
     
     bandLevels.forEach((level, i) => {
       let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
@@ -371,6 +575,7 @@
       const x = HORIZONTAL_MARGIN + i * (barWidth + BAR_SPACING);
       const y = eqCanvas.height - finalVisibleHeight;
       
+      eqCtx.fillStyle = fillStyle;
       eqCtx.beginPath();
       eqCtx.moveTo(x + CORNER_RADIUS, y);
       eqCtx.lineTo(x + barWidth - CORNER_RADIUS, y);
@@ -381,6 +586,25 @@
       eqCtx.quadraticCurveTo(x, y, x + CORNER_RADIUS, y);
       eqCtx.closePath();
       eqCtx.fill();
+
+      if (showPeakMeter) {
+        if (currentBarHeights[i] >= peakHeights[i]) {
+          peakHeights[i] = currentBarHeights[i];
+          peakHoldTimers[i] = currentTime;
+        } else {
+          if (currentTime - peakHoldTimers[i] > PEAK_HOLD_TIME) {
+            peakHeights[i] = Math.max(0, peakHeights[i] - (PEAK_FALL_SPEED * deltaTime));
+          }
+        }
+
+        if (peakHeights[i] > 0) {
+            const peakY = eqCanvas.height - peakHeights[i] - PEAK_BAR_HEIGHT;
+            if (peakY < y - PEAK_BAR_HEIGHT) {
+                eqCtx.fillStyle = fillStyle;
+                eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
+            }
+        }
+      }
     });
     
     animationFrameId = requestAnimationFrame(drawEQ);
