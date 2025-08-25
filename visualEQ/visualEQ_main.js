@@ -534,28 +534,27 @@ async function checkForUpdates() {
 
         const owner = match[1];
         const repo = match[2];
-
-        const baseUrl = `https://cdn.jsdelivr.net/gh/${owner}/${repo}@main/visualeq.js`;
         
+        const baseUrl = `https://cdn.jsdelivr.net/gh/${owner}/${repo}@main/visualeq.js`;
         const scriptUrl = baseUrl + '?t=' + new Date().getTime();
 
         const response = await fetch(scriptUrl, { cache: 'no-cache' });
         if (!response.ok) return;
 
-
         const scriptContent = await response.text();
-        
-
         const versionRegex = /version:\s*['"]([^'"]+)['"]/;
         const versionMatch = scriptContent.match(versionRegex);
 
         if (versionMatch && versionMatch[1]) {
             const latestVersion = versionMatch[1];
 
-            if (latestVersion !== PLUGIN_VERSION) {
+            // ENDRING HER: Bruk den nye, smarte sammenligningen
+            // Viser kun melding hvis versjonen på GitHub er nyere enn den installerte.
+            if (compareVersions(latestVersion, PLUGIN_VERSION) > 0) {
                 const versionElement = document.getElementById('visualeq-version-info');
                 if (versionElement) {
                     if (!versionElement.textContent.includes('New version available')) {
+                        // Legg til 'v' foran for en penere visning
                         versionElement.innerHTML += ` <span style="color: var(--color-4, #ffcc00); opacity: 0.8;">(New version available: v${latestVersion})</span>`;
                     }
                 }
@@ -564,6 +563,20 @@ async function checkForUpdates() {
     } catch (error) {
         console.log('VisualEQ: Could not check for updates.', error);
     }
+}
+
+function compareVersions(v1, v2) {
+    const parts1 = v1.replace('v', '').split('.').map(Number);
+    const parts2 = v2.replace('v', '').split('.').map(Number);
+    const len = Math.max(parts1.length, parts2.length);
+
+    for (let i = 0; i < len; i++) {
+        const p1 = parts1[i] || 0;
+        const p2 = parts2[i] || 0;
+        if (p1 > p2) return 1;  
+        if (p1 < p2) return -1; 
+    }
+    return 0; 
 }
 
 
