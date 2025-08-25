@@ -6,41 +6,61 @@
 // -----------------------------------------------------------
 
 (() => {
-  // ────────────────────────────────────────────────────────────
-  // Settings
-  // ────────────────────────────────────────────────────────────
-  const PLUGIN_VERSION = 'v1.1.1'; 
+  // ===================================================================================
+  // VisualEQ v1.2 :: CONFIGURATION
+  // ===================================================================================
+  // This section contains all the settings for the plugin. It is divided into two parts:
+  // 1. User-Configurable Settings: Safe to tweak for visual adjustments.
+  // 2. Core Plugin Settings: Advanced settings that affect the plugin's logic.
+  //    Only change these if you know what you are doing.
+  // -----------------------------------------------------------------------------------
+
+  const PLUGIN_VERSION = 'v1.2'; 
   const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
-  const MOBILE_BREAKPOINT = 769;
-  const INACTIVE_RDS_OPACITY = '0.4';
-  const TP_ROW_SCALE = '0.6';
-  const SWAP_PTY_AND_TP_ROW = true;
+  // -----------------------------------------------------------------------------------
+  // SECTION 1: USER-CONFIGURABLE SETTINGS (Safe to Tweak)
+  // -----------------------------------------------------------------------------------
+  
+  // --- General Layout ---
+  const MOBILE_BREAKPOINT = 769;      // The screen width (in pixels) below which the plugin will deactivate.
+  const SWAP_PTY_AND_TP_ROW = true;   // Set to `true` to place the PTY row at the bottom, `false` for the top.
+  const TP_ROW_SCALE = '0.6';         // The size scale of the TP/TA/Stereo row.
+  const INACTIVE_RDS_OPACITY = '0.4'; // The opacity of the 'RDS' text when no RDS PS is detected.
 
-  const MODAL_TOP_POSITION = '50%';
-  const MODAL_LEFT_POSITION = '50%';
-  const SETTINGS_BUTTON_SCALE = '0.6';
-  const MODAL_TEXT_SCALE = '0.7';
+  // --- Settings Modal ---
+  const MODAL_TOP_POSITION = '50%';   // Vertical position of the settings window.
+  const MODAL_LEFT_POSITION = '50%';  // Horizontal position of the settings window.
+  const SETTINGS_BUTTON_SCALE = '0.6';// The size of the settings gear icon.
+  const MODAL_TEXT_SCALE = '0.7';     // The base text size inside the settings window.
 
-  const SENSITIVITY_DEFAULT = 0.8;
-  const SENSITIVITY_MIN = 0.5;
-  const SENSITIVITY_MAX = 1.5;
+  // --- Visualizer Physics & Appearance ---
+  const SENSITIVITY_DEFAULT = 0.8;    // The default vertical sensitivity of the visualizer.
+  const SENSITIVITY_MIN = 0.5;        // The minimum value for the sensitivity slider.
+  const SENSITIVITY_MAX = 1.5;        // The maximum value for the sensitivity slider.
 
-  const MINIMUM_BAR_HEIGHT = 2;
-  const HORIZONTAL_MARGIN = 5;
-  const BAR_SPACING = 2;
-  const CORNER_RADIUS = 2;
-  const FALL_SPEED = 120;
-  const NOISE_GATE_THRESHOLD = 1.0;
+  const FALL_SPEED = 120;             // How quickly the bars fall (higher value = faster fall).
+  const HORIZONTAL_MARGIN = 5;        // The space (in pixels) on the left and right edges of the visualizer.
+  const BAR_SPACING = 2;              // The space (in pixels) between each bar in 'Bars' and 'LED' mode.
+  const CORNER_RADIUS = 2;            // The corner roundness for 'Bars' mode. Set to 0 for sharp corners.
 
-  const PEAK_HOLD_TIME = 500;
-  const PEAK_FALL_SPEED = 50;
-  const PEAK_BAR_HEIGHT = 2;
+  // --- Peak Meter ---
+  const PEAK_HOLD_TIME = 500;         // How long the peak line should "hold" at the top (in milliseconds).
+  const PEAK_FALL_SPEED = 50;         // How quickly the peak line falls after holding (lower value = slower).
+  const PEAK_BAR_HEIGHT = 2;          // The thickness (in pixels) of the peak line.
 
-const EQ_THEMES = [
+  // --- LED Mode Specific ---
+  const LED_BLOCK_COUNT = 18;         // The number of vertical LED blocks in each bar for 'LED' mode.
+  const LED_BLOCK_SPACING = 2;        // The space (in pixels) between each vertical LED block.
 
-    { name: 'Server Themecolor',  colors: [] },
+  // --- Color Themes ---
+  // You can easily add your own themes here.
+  // - For a solid color, use one color in the 'colors' array: { name: 'My Color', colors: ['#ff00ff'] }
+  // - For a gradient, use two or more colors: { name: 'My Gradient', colors: ['#ff00ff', '#00ffff'] }
+  const EQ_THEMES = [
+    { name: 'Server Themecolor',  colors: [] }, // Special theme that uses the server's --color-4 variable.
 
+    // Solid Colors
     { name: 'Red',    colors: ['#ff3b30'] },
     { name: 'Orange', colors: ['#ff9500'] },
     { name: 'Yellow', colors: ['#ffcc00'] },
@@ -52,6 +72,7 @@ const EQ_THEMES = [
     { name: 'Pink',   colors: ['#ff2d55'] },
     { name: 'White',  colors: ['#ffffff'] },
     
+    // Gradients
     { name: 'Sunset',   colors: ['#FFD166', '#EF476F', '#8338EC'] },
     { name: 'Oceanic',  colors: ['#48BFE3', '#5390D9', '#64DFDF'] },
     { name: 'Synthwave',colors: ['#F72585', '#7209B7', '#3A0CA3'] },
@@ -64,14 +85,26 @@ const EQ_THEMES = [
     { name: 'Lava',     colors: ['#540B0E', '#E07A5F'] }
   ];
 
-  let currentThemeIndex = 0;
+  // -----------------------------------------------------------------------------------
+  // SECTION 2: CORE PLUGIN SETTINGS (Advanced users only)
+  // -----------------------------------------------------------------------------------
+
+  // --- Core Audio Processing ---
+  const MINIMUM_BAR_HEIGHT = 2;       // The minimum visible height of a bar to prevent it from disappearing completely.
+  const NOISE_GATE_THRESHOLD = 1.0;   // Audio values below this will be treated as silence. Helps reduce background noise flicker.
   
+  // --- Visualizer Modes ---
+  // Do not change this array unless you also add a corresponding `drawMode...` function and a `case` in the main `drawEQ` function.
+  const VISUALIZER_MODES = ['Bars', 'LED', 'Spectrum'];
+
+  // --- Analyser Quality ---
+  // These are the specific FFT (Fast Fourier Transform) sizes for the Web Audio API.
+  // Changing these values without understanding the API can break the visualizer.
   const FFT_SIZES = {
     OFF: 0,
     Low: 1024,
-    Medium: 2048,
-    High: 4096,
-    Ultra: 8192
+    Medium: 4096,
+    High: 8192
   };
   let currentFftSize = FFT_SIZES.Medium;
   let SENSITIVITY = SENSITIVITY_DEFAULT;
@@ -84,6 +117,7 @@ const EQ_THEMES = [
   let animationFrameId = null;
   let lastFrameTime = 0;
   let resizeTimeout;
+  let currentVisualizerMode = 'Bars';
 
   // ────────────────────────────────────────────────────────────
   // INITIALISERING
@@ -113,10 +147,22 @@ const EQ_THEMES = [
   // ────────────────────────────────────────────────────────────
   function setupPlugin() {
     currentThemeIndex = parseInt(localStorage.getItem('visualeqThemeIndex') || '0', 10);
-    currentFftSize = parseInt(localStorage.getItem('visualeqFftSize') || FFT_SIZES.Medium, 10);
+    let loadedFftSize = parseInt(localStorage.getItem('visualeqFftSize'));
+
+    if (isNaN(loadedFftSize)) {
+    } else {
+        if (loadedFftSize === 2048) {
+            currentFftSize = 4096;
+            localStorage.setItem('visualeqFftSize', currentFftSize);
+        } else {
+            currentFftSize = loadedFftSize;
+        }
+    }
+	
     SENSITIVITY = parseFloat(localStorage.getItem('visualeqSensitivity') || SENSITIVITY_DEFAULT);
 
 	showPeakMeter = localStorage.getItem('visualeqShowPeak') === 'true';
+	currentVisualizerMode = localStorage.getItem('visualeqMode') || 'Bars';
 
     const styleTag = document.createElement('style');
     styleTag.innerHTML = `
@@ -197,7 +243,11 @@ const EQ_THEMES = [
         transform: `scale(${SETTINGS_BUTTON_SCALE})`,
         transition: 'opacity 0.2s, transform 0.2s ease-in-out'
     });
-    settingsButton.onclick = () => document.getElementById('fmdx-settings-modal-overlay').style.display = 'block';
+
+    settingsButton.onclick = () => {
+        document.getElementById('fmdx-settings-modal-overlay').style.display = 'block';
+        checkForUpdates();
+    };
     return settingsButton;
   }
 
@@ -368,7 +418,8 @@ const EQ_THEMES = [
       <div>
         <h2>EQ Settings</h2>
         <a href="${GITHUB_URL}" target="_blank" style="text-decoration: none; cursor: pointer;">
-          <p style="margin: 4px 0 0; font-size: 0.9em;">VisualEQ ${PLUGIN_VERSION}</p>
+          <!-- ENDRING: Lagt til id="visualeq-version-info" -->
+          <p id="visualeq-version-info" style="margin: 4px 0 0; font-size: 0.9em;">VisualEQ ${PLUGIN_VERSION}</p>
         </a>
       </div>`;
     
@@ -394,6 +445,15 @@ const EQ_THEMES = [
     Object.keys(FFT_SIZES).forEach(key => qualitySelect.innerHTML += `<option value="${FFT_SIZES[key]}" ${FFT_SIZES[key] === currentFftSize ? 'selected' : ''}>${key}</option>`);
     qualitySelect.onchange = () => { currentFftSize = parseInt(qualitySelect.value, 10); localStorage.setItem('visualeqFftSize', currentFftSize); startOrRestartEQ(); };
     
+	const modeSelect = document.createElement('select');
+    VISUALIZER_MODES.forEach(mode => {
+      modeSelect.innerHTML += `<option value="${mode}" ${mode === currentVisualizerMode ? 'selected' : ''}>${mode}</option>`;
+    });
+    modeSelect.onchange = (e) => {
+      currentVisualizerMode = e.target.value;
+      localStorage.setItem('visualeqMode', currentVisualizerMode);
+    };
+	
     const sensitivitySlider = document.createElement('input');
     sensitivitySlider.id = 'visualeq-sensitivity-slider';
     Object.assign(sensitivitySlider, { type: 'range', min: SENSITIVITY_MIN, max: SENSITIVITY_MAX, step: 0.1, value: SENSITIVITY });
@@ -419,10 +479,12 @@ const EQ_THEMES = [
     helpSection.className = 'help-section';
     helpSection.innerHTML = `
         <hr>
-        <h4 style="margin: 0 0 0.8em 0; font-size: 1.2em; color: var(--color-3);">Help</h4>
-        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Sensitivity:</strong> Controls the vertical amplification of the bars.</p>
-        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Analyser Quality:</strong> Higher values provide more detail but may use more CPU. 'OFF' disables the visualizer.</p>
+        <h4 style="margin: 0 0 0.8em 0; font-size: 1.2em; color: var(--color-3);">Tips</h4>
+        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Visualizer Mode:</strong> Changes the visual style of the analyzer (Bars, LED, Spectrum).</p>
         <p style="margin: 0.8em 0; font-size: 1em;"><strong>Theme:</strong> Changes the color scheme of the audio visualizer.</p>
+        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Peak Meter:</strong> Displays a line indicating the highest recent audio level for each band (Bars & LED mode).</p>
+        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Sensitivity:</strong> Controls the vertical amplification of the visualizer.</p>
+        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Analyser Quality:</strong> Higher values provide more detail but may use more CPU. 'OFF' disables the visualizer.</p>
     `;
 
     const createControlSection = (label, controlElement, marginTop = '0') => {
@@ -449,6 +511,7 @@ const EQ_THEMES = [
     
     scrollableArea.append(
         createControlSection('Theme', themeSelect),
+		createControlSection('Visualizer Mode', modeSelect, '1.5em'),
         createControlSection('Analyser Quality', qualitySelect, '1.5em'),
 		peakMeterContainer,
         sensitivityContainer,
@@ -463,6 +526,46 @@ const EQ_THEMES = [
     modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeModal(); };
     closeButton.onclick = closeModal;
   }
+
+async function checkForUpdates() {
+    try {
+        const match = GITHUB_URL.match(/github\.com\/(.*)\/(.*)\.git/);
+        if (!match) return; 
+
+        const owner = match[1];
+        const repo = match[2];
+
+        const baseUrl = `https://cdn.jsdelivr.net/gh/${owner}/${repo}@main/visualeq.js`;
+        
+        const scriptUrl = baseUrl + '?t=' + new Date().getTime();
+
+        const response = await fetch(scriptUrl, { cache: 'no-cache' });
+        if (!response.ok) return;
+
+
+        const scriptContent = await response.text();
+        
+
+        const versionRegex = /version:\s*['"]([^'"]+)['"]/;
+        const versionMatch = scriptContent.match(versionRegex);
+
+        if (versionMatch && versionMatch[1]) {
+            const latestVersion = versionMatch[1];
+
+            if (latestVersion !== PLUGIN_VERSION) {
+                const versionElement = document.getElementById('visualeq-version-info');
+                if (versionElement) {
+                    if (!versionElement.textContent.includes('New version available')) {
+                        versionElement.innerHTML += ` <span style="color: var(--color-4, #ffcc00); opacity: 0.8;">(New version available: v${latestVersion})</span>`;
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.log('VisualEQ: Could not check for updates.', error);
+    }
+}
+
 
   // ────────────────────────────────────────────────────────────
   // EQUALIZER-LOGIKK
@@ -514,101 +617,268 @@ function startOrRestartEQ() {
 
   const bandRanges = [ { start: 1, end: 1 }, { start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 8 }, { start: 9, end: 12 }, { start: 13, end: 17 }, { start: 18, end: 24 }, { start: 25, end: 33 }, { start: 34, end: 45 }, { start: 46, end: 62 }, { start: 63, end: 84 }, { start: 85, end: 112 }, { start: 113, end: 148 }, { start: 149, end: 195 }, { start: 196, end: 256 }, { start: 257, end: 330 }, { start: 331, end: 420 }, { start: 421, end: 530 }, { start: 531, end: 660 }, { start: 661, end: 800 } ];
 
-  function calculateBandLevels() {
-    if (!dataArray) return new Array(20).fill(0);
+  const bandRanges40 = (() => {
+    const ranges = [];
+    const maxIndex = 1023;
+    let lastIndex = 1;
+    for (let i = 0; i < 40; i++) {
+        const endIndex = Math.floor(Math.pow(maxIndex, (i + 1) / 40));
+        const startIndex = Math.max(lastIndex, 1);
+        if (startIndex <= endIndex) {
+            ranges.push({ start: startIndex, end: endIndex });
+        }
+        lastIndex = endIndex + 1;
+    }
+    return ranges;
+  })();
+	
+function calculateBandLevels(numBands) {
+  if (!dataArray || !audioContext) return new Array(numBands).fill(0);
+
+  if (numBands === 20) {
+    if (dataArray.length < 801) { 
+        const scale = dataArray.length / 801;
+        return bandRanges.map(range => {
+            let sum = 0;
+            const start = Math.floor(range.start * scale);
+            const end = Math.floor(range.end * scale);
+            for (let i = start; i <= end; i++) sum += dataArray[i] || 0;
+            return sum / (end - start + 1);
+        });
+    }
     return bandRanges.map(range => {
       let sum = 0;
-      for (let i = range.start; i <= range.end; i++) sum += dataArray[i];
+      for (let i = range.start; i <= range.end; i++) sum += dataArray[i] || 0;
       return sum / (range.end - range.start + 1);
     });
   }
   
-  function drawEQ(currentTime) {
-    if (!analyser || audioContext.state !== 'running') {
-        if (currentBarHeights.every(h => h === 0)) {
-            animationFrameId = null;
-            return;
+
+  const levels = [];
+  
+
+  const targetFrequencyCutoff = 16000;
+
+  const maxPossibleFrequency = audioContext.sampleRate / 2;
+
+
+  const maxIndex = Math.min(
+      dataArray.length - 1,
+      Math.floor((targetFrequencyCutoff / maxPossibleFrequency) * dataArray.length)
+  );
+
+  let lastIndex = 1;
+
+  for (let i = 0; i < numBands; i++) {
+    let endIndex = Math.floor(Math.pow(maxIndex, (i + 1) / numBands));
+    const startIndex = Math.max(lastIndex, 1);
+    
+    if (endIndex < startIndex) {
+        endIndex = startIndex;
+    }
+    
+    let sum = 0;
+    let count = 0;
+    if (startIndex <= endIndex && startIndex < dataArray.length) { 
+        for (let j = startIndex; j <= endIndex; j++) {
+            sum += dataArray[j] || 0;
+            count++;
         }
     }
-    
-    const deltaTime = (currentTime - (lastFrameTime || currentTime)) / 1000;
-    lastFrameTime = currentTime;
-    
-    let bandLevels = new Array(20).fill(0);
-    if (analyser && audioContext.state === 'running') {
-        analyser.getByteFrequencyData(dataArray);
-        bandLevels = calculateBandLevels();
-    }
-    
-    eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
-    const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
-    const barWidth = (totalDrawingWidth - (BAR_SPACING * (bandRanges.length - 1))) / bandRanges.length;
-    
-    const activeTheme = EQ_THEMES[currentThemeIndex];
-    
-    let fillStyle;
-    if (activeTheme.name === 'Server Themecolor') {
-        const serverColor = getComputedStyle(document.documentElement).getPropertyValue('--color-4').trim();
-        fillStyle = serverColor || '#00ff00';
-    } else if (activeTheme.colors.length === 1) {
-        fillStyle = activeTheme.colors[0];
-    } else {
-        const gradient = eqCtx.createLinearGradient(0, eqCanvas.height, 0, 0);
-        activeTheme.colors.forEach((color, i) => {
-            const position = i / (activeTheme.colors.length - 1);
-            gradient.addColorStop(position, color);
-        });
-        fillStyle = gradient;
-    }
-    
-    bandLevels.forEach((level, i) => {
-      let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
-      if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
-      
-      if (targetHeight > currentBarHeights[i]) {
-        currentBarHeights[i] = targetHeight;
-      } else {
-        currentBarHeights[i] = Math.max(0, currentBarHeights[i] - (FALL_SPEED * deltaTime));
+    levels.push(count > 0 ? sum / count : 0);
+    lastIndex = endIndex + 1;
+  }
+  return levels;
+}
+
+function drawEQ(currentTime) {
+  if (!analyser || audioContext.state !== 'running') {
+      if (currentBarHeights.every(h => h === 0)) {
+          animationFrameId = null;
+          return;
       }
-      
-      const finalVisibleHeight = MINIMUM_BAR_HEIGHT + (currentBarHeights[i] || 0);
-      const x = HORIZONTAL_MARGIN + i * (barWidth + BAR_SPACING);
-      const y = eqCanvas.height - finalVisibleHeight;
-      
-      eqCtx.fillStyle = fillStyle;
-      eqCtx.beginPath();
-      eqCtx.moveTo(x + CORNER_RADIUS, y);
-      eqCtx.lineTo(x + barWidth - CORNER_RADIUS, y);
-      eqCtx.quadraticCurveTo(x + barWidth, y, x + barWidth, y + CORNER_RADIUS);
-      eqCtx.lineTo(x + barWidth, eqCanvas.height);
-      eqCtx.lineTo(x, eqCanvas.height);
-      eqCtx.lineTo(x, y + CORNER_RADIUS);
-      eqCtx.quadraticCurveTo(x, y, x + CORNER_RADIUS, y);
-      eqCtx.closePath();
-      eqCtx.fill();
+  }
+  
+  const deltaTime = (currentTime - (lastFrameTime || currentTime)) / 1000;
+  lastFrameTime = currentTime;
+  
+  let bandLevels;
+  if (analyser && audioContext.state === 'running') {
+      analyser.getByteFrequencyData(dataArray);
+      const numBands = currentVisualizerMode === 'Spectrum' ? 40 : 20;
+      bandLevels = calculateBandLevels(numBands);
+  } else {
+      const numBands = currentVisualizerMode === 'Spectrum' ? 40 : 20;
+      bandLevels = new Array(numBands).fill(0);
+  }
+  
+  eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
 
-      if (showPeakMeter) {
-        if (currentBarHeights[i] >= peakHeights[i]) {
-          peakHeights[i] = currentBarHeights[i];
-          peakHoldTimers[i] = currentTime;
-        } else {
-          if (currentTime - peakHoldTimers[i] > PEAK_HOLD_TIME) {
-            peakHeights[i] = Math.max(0, peakHeights[i] - (PEAK_FALL_SPEED * deltaTime));
-          }
+  switch (currentVisualizerMode) {
+    case 'LED':
+      drawModeLed(bandLevels, deltaTime);
+      break;
+    case 'Spectrum':
+      drawModeSpectrum(bandLevels);
+      break;
+    case 'Bars':
+    default:
+      drawModeBars(bandLevels, deltaTime);
+      break;
+  }
+  
+  animationFrameId = requestAnimationFrame(drawEQ);
+}
+
+function drawModeBars(bandLevels, deltaTime) {
+  const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
+  const barWidth = (totalDrawingWidth - (BAR_SPACING * (bandLevels.length - 1))) / bandLevels.length;
+  const activeTheme = EQ_THEMES[currentThemeIndex];
+  let fillStyle;
+  if (activeTheme.name === 'Server Themecolor') { fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-4').trim() || '#00ff00'; } 
+  else if (activeTheme.colors.length === 1) { fillStyle = activeTheme.colors[0]; } 
+  else {
+      const gradient = eqCtx.createLinearGradient(0, eqCanvas.height, 0, 0);
+      activeTheme.colors.forEach((c, i) => gradient.addColorStop(i / (activeTheme.colors.length - 1), c));
+      fillStyle = gradient;
+  }
+
+  bandLevels.forEach((level, i) => {
+    let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
+    if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
+    currentBarHeights[i] = targetHeight > currentBarHeights[i] ? targetHeight : Math.max(0, currentBarHeights[i] - (FALL_SPEED * deltaTime));
+    const finalVisibleHeight = MINIMUM_BAR_HEIGHT + (currentBarHeights[i] || 0);
+    const x = HORIZONTAL_MARGIN + i * (barWidth + BAR_SPACING);
+    const y = eqCanvas.height - finalVisibleHeight;
+    
+    eqCtx.fillStyle = fillStyle;
+    eqCtx.beginPath();
+    eqCtx.moveTo(x + CORNER_RADIUS, y);
+    eqCtx.lineTo(x + barWidth - CORNER_RADIUS, y);
+    eqCtx.quadraticCurveTo(x + barWidth, y, x + barWidth, y + CORNER_RADIUS);
+    eqCtx.lineTo(x + barWidth, eqCanvas.height);
+    eqCtx.lineTo(x, eqCanvas.height);
+    eqCtx.lineTo(x, y + CORNER_RADIUS);
+    eqCtx.quadraticCurveTo(x, y, x + CORNER_RADIUS, y);
+    eqCtx.closePath();
+    eqCtx.fill();
+
+    if (showPeakMeter) {
+      if (currentBarHeights[i] >= peakHeights[i]) {
+        peakHeights[i] = currentBarHeights[i];
+        peakHoldTimers[i] = performance.now();
+      } else {
+        if (performance.now() - peakHoldTimers[i] > PEAK_HOLD_TIME) {
+          peakHeights[i] = Math.max(0, peakHeights[i] - (PEAK_FALL_SPEED * deltaTime));
         }
+      }
+      if (peakHeights[i] > 0) {
+          const peakY = eqCanvas.height - peakHeights[i] - PEAK_BAR_HEIGHT;
+          if (peakY < y - PEAK_BAR_HEIGHT) {
+            eqCtx.fillStyle = fillStyle;
+            eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
+            eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
+          }
+      }
+    }
+  });
+}
 
-        if (peakHeights[i] > 0) {
-            const peakY = eqCanvas.height - peakHeights[i] - PEAK_BAR_HEIGHT;
-            if (peakY < y - PEAK_BAR_HEIGHT) {
-                eqCtx.fillStyle = fillStyle;
-                eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
+function drawModeLed(bandLevels, deltaTime) {
+  const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
+  const barWidth = (totalDrawingWidth - (BAR_SPACING * (bandLevels.length - 1))) / bandLevels.length;
+  const activeTheme = EQ_THEMES[currentThemeIndex];
+
+  const totalBlockHeight = eqCanvas.height - (LED_BLOCK_SPACING * (LED_BLOCK_COUNT - 1));
+  const blockHeight = totalBlockHeight / LED_BLOCK_COUNT;
+
+  bandLevels.forEach((level, i) => {
+    let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
+    if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
+    currentBarHeights[i] = targetHeight > currentBarHeights[i] ? targetHeight : Math.max(0, currentBarHeights[i] - (FALL_SPEED * deltaTime));
+
+    const litBlocks = Math.round((currentBarHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
+    const x = HORIZONTAL_MARGIN + i * (barWidth + BAR_SPACING);
+
+    for (let j = 0; j < LED_BLOCK_COUNT; j++) {
+      if (j < litBlocks) {
+        const y = eqCanvas.height - (j + 1) * (blockHeight + LED_BLOCK_SPACING);
+        let color;
+        const percent = j / LED_BLOCK_COUNT;
+        if(activeTheme.colors.length >= 3) {
+            if(percent > 0.8) color = activeTheme.colors[2];
+            else if (percent > 0.5) color = activeTheme.colors[1];
+            else color = activeTheme.colors[0];
+        } else if (activeTheme.colors.length === 2) {
+            color = percent > 0.6 ? activeTheme.colors[1] : activeTheme.colors[0];
+        } else if (activeTheme.colors.length === 1) {
+            color = activeTheme.colors[0];
+        } else {
+            color = getComputedStyle(document.documentElement).getPropertyValue('--color-4').trim() || '#00ff00';
+        }
+        eqCtx.fillStyle = color;
+        eqCtx.fillRect(x, y, barWidth, blockHeight);
+      }
+    }
+    
+    if (showPeakMeter) {
+        if (currentBarHeights[i] >= peakHeights[i]) {
+            peakHeights[i] = currentBarHeights[i];
+            peakHoldTimers[i] = performance.now();
+        } else {
+            if (performance.now() - peakHoldTimers[i] > PEAK_HOLD_TIME) {
+            peakHeights[i] = Math.max(0, peakHeights[i] - (PEAK_FALL_SPEED * deltaTime));
             }
         }
-      }
-    });
-    
-    animationFrameId = requestAnimationFrame(drawEQ);
+        
+        const peakBlock = Math.round((peakHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
+        if (peakBlock > 0 && peakBlock > litBlocks) {
+            const peakY = eqCanvas.height - (peakBlock) * (blockHeight + LED_BLOCK_SPACING);
+            const peakColor = activeTheme.colors[activeTheme.colors.length -1] || '#ff0000';
+            
+            eqCtx.fillStyle = peakColor;
+            eqCtx.fillRect(x, peakY, barWidth, blockHeight);
+            eqCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            eqCtx.fillRect(x, peakY, barWidth, blockHeight);
+        }
+    }
+  });
+}
+
+function drawModeSpectrum(bandLevels) {
+  const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
+  const spacing = totalDrawingWidth / (bandLevels.length - 1);
+  
+  const activeTheme = EQ_THEMES[currentThemeIndex];
+  let strokeStyle;
+  
+  if (activeTheme.name === 'Server Themecolor') { strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-4').trim() || '#00ff00'; } 
+  else if (activeTheme.colors.length === 1) { strokeStyle = activeTheme.colors[0]; } 
+  else {
+      const gradient = eqCtx.createLinearGradient(0, 0, eqCanvas.width, 0);
+      activeTheme.colors.forEach((c, i) => gradient.addColorStop(i / (activeTheme.colors.length - 1), c));
+      strokeStyle = gradient;
   }
+
+  eqCtx.strokeStyle = strokeStyle;
+  eqCtx.lineWidth = 2;
+  eqCtx.beginPath();
+  
+  bandLevels.forEach((level, i) => {
+    let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
+    if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
+    
+    const x = HORIZONTAL_MARGIN + i * spacing;
+    const y = eqCanvas.height - targetHeight;
+    
+    if (i === 0) {
+        eqCtx.moveTo(x, y);
+    } else {
+        eqCtx.lineTo(x, y);
+    }
+  });
+  
+  eqCtx.stroke();
+}
 })();
-
-
