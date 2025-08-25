@@ -9,7 +9,7 @@
   // ────────────────────────────────────────────────────────────
   // Settings
   // ────────────────────────────────────────────────────────────
-  const PLUGIN_VERSION = 'v1.1'; 
+  const PLUGIN_VERSION = 'v1.1.1'; 
   const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
   const MOBILE_BREAKPOINT = 769;
@@ -610,4 +610,5 @@ function startOrRestartEQ() {
     animationFrameId = requestAnimationFrame(drawEQ);
   }
 })();
+
 
