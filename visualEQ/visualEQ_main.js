@@ -547,7 +547,7 @@ function startOrRestartEQ() {
     const activeTheme = EQ_THEMES[currentThemeIndex];
     
     let fillStyle;
-    if (activeTheme.name === 'Server') {
+    if (activeTheme.name === 'Server Themecolor') {
         const serverColor = getComputedStyle(document.documentElement).getPropertyValue('--color-4').trim();
         fillStyle = serverColor || '#00ff00';
     } else if (activeTheme.colors.length === 1) {
@@ -610,3 +610,4 @@ function startOrRestartEQ() {
     animationFrameId = requestAnimationFrame(drawEQ);
   }
 })();
+
