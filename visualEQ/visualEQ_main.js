@@ -20,7 +20,7 @@
   const SERVER_OWNER_DEFAULTS = {
     // Should the plugin be enabled by default for new users?
     // Options: true (on), false (off)
-    DEFAULT_PLUGIN_ENABLED: true, // Not working at the moment!!
+    DEFAULT_PLUGIN_ENABLED: true,
 
     // Default theme for the visualizer.
     // IMPORTANT: You must use the exact theme name from the 'EQ_THEMES' list below.
@@ -1050,3 +1050,4 @@ setInterval(() => {
     }
 }, 1000);
 })();
+
