@@ -7,7 +7,7 @@
 
 (() => {
   // ===================================================================================
-  // VisualEQ v1.3 :: CONFIGURATION
+  // VisualEQ v1.3.1 :: CONFIGURATION
   // ===================================================================================
 
   // -----------------------------------------------------------------------------------
@@ -20,7 +20,7 @@
   const SERVER_OWNER_DEFAULTS = {
     // Should the plugin be enabled by default for new users?
     // Options: true (on), false (off)
-    DEFAULT_PLUGIN_ENABLED: true,
+    DEFAULT_PLUGIN_ENABLED: true, // Not working at the moment!!
 
     // Default theme for the visualizer.
     // IMPORTANT: You must use the exact theme name from the 'EQ_THEMES' list below.
@@ -29,7 +29,7 @@
 
     // Default visualizer mode.
     // Options: 'Bars', 'LED', 'Spectrum'
-    DEFAULT_VISUALIZER_MODE: 'Bars',
+    DEFAULT_VISUALIZER_MODE: 'Spectrum',
 
     // Should the peak meter be active by default? (for 'Bars' and 'LED' modes)
     // Options: true (on), false (off)
@@ -146,7 +146,7 @@
   };
   
   
-  const PLUGIN_VERSION = 'v1.3'; 
+  const PLUGIN_VERSION = 'v1.3.1'; 
   const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
   
   let currentFftSize = FFT_SIZES.Medium;
@@ -279,6 +279,9 @@ function addVisualEQToggle() {
     const isEnabled = storedState === null
         ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED
         : (storedState !== 'false');
+	if (storedState === null) {
+        localStorage.setItem('visualeqEnabled', isEnabled);
+    }
     document.getElementById(id).checked = isEnabled;
 
     document.getElementById(id).addEventListener("change", function () {
@@ -683,12 +686,6 @@ function startOrRestartEQ() {
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
     
-    // Safety check in case this is called too early
-    if (typeof Stream === 'undefined' || !Stream.Fallback || !Stream.Fallback.Audio) {
-        console.warn("VisualEQ: Attempted to start EQ, but audio stream is not ready. Watchdog will handle it.");
-        return;
-    }
-    
     audioContext = Stream.Fallback.Audio;
     if (audioContext.state === 'suspended') audioContext.resume();
     
@@ -699,11 +696,10 @@ function startOrRestartEQ() {
     Object.assign(analyser, { fftSize: currentFftSize, smoothingTimeConstant: 0.6 });
     dataArray = new Uint8Array(analyser.frequencyBinCount);
     
-    const numBands = currentVisualizerMode === 'Spectrum' ? 40 : 20;
-    if (currentBarHeights.length !== numBands) {
-      currentBarHeights = new Array(numBands).fill(0);
-      peakHeights = new Array(numBands).fill(0);
-      peakHoldTimers = new Array(numBands).fill(0);
+    if (currentBarHeights.length !== 20) {
+      currentBarHeights = new Array(20).fill(0);
+      peakHeights = new Array(20).fill(0);
+      peakHoldTimers = new Array(20).fill(0);
     }
     
     liveAudioPlayer.Amplification.connect(analyser);
@@ -819,7 +815,6 @@ function drawModeBars(bandLevels, deltaTime) {
     let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
     if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
     
-    // KORREKT FALL-LOGIKK
     currentBarHeights[i] = targetHeight > currentBarHeights[i] ? targetHeight : Math.max(0, currentBarHeights[i] - (FALL_SPEED * deltaTime));
     
     const finalVisibleHeight = MINIMUM_BAR_HEIGHT + currentBarHeights[i];
@@ -871,15 +866,15 @@ function drawModeLed(bandLevels, deltaTime) {
   bandLevels.forEach((level, i) => {
     let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
     if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
-
+    
     currentBarHeights[i] = targetHeight > currentBarHeights[i] ? targetHeight : Math.max(0, currentBarHeights[i] - (FALL_SPEED * deltaTime));
 
     const litBlocks = Math.ceil((currentBarHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
     const x = HORIZONTAL_MARGIN + i * (barWidth + BAR_SPACING);
-
+    
     if (litBlocks === 0) {
         const y = eqCanvas.height - (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
-        eqCtx.fillStyle = 'rgba(128, 128, 128, 0.15)'; 
+        eqCtx.fillStyle = 'rgba(128, 128, 128, 0.15)';
         eqCtx.fillRect(x, y, barWidth, blockHeight);
     }
 
@@ -1025,13 +1020,8 @@ function drawModeSpectrum(bandLevels) {
 }
 
 setInterval(() => {
-    const storedState = localStorage.getItem('visualeqEnabled');
-    const isEnabled = storedState === null
-        ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED
-        : (storedState !== 'false');
-
+    const isEnabled = localStorage.getItem('visualeqEnabled') !== 'false';
     if (!isEnabled) {
-      if(isEqLayoutActive) teardownVisualEQLayout();
         return; 
     }
 
@@ -1040,7 +1030,7 @@ setInterval(() => {
     }
 
     if (animationFrameId !== null) {
-        if (typeof Stream === 'undefined' || !Stream.Fallback || !Stream.Fallback.Audio || Stream.Fallback.Audio.state !== 'running') {
+        if (!Stream || !Stream.Fallback || !Stream.Fallback.Audio || Stream.Fallback.Audio.state !== 'running') {
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
             analyser = null;
@@ -1050,14 +1040,13 @@ setInterval(() => {
         return;
     }
 
-    if (typeof Stream !== 'undefined' && Stream.Fallback && Stream.Fallback.Audio && Stream.Fallback.Audio.state === 'running') {
+    if (Stream && Stream.Fallback && Stream.Fallback.Audio && Stream.Fallback.Audio.state === 'running') {
         console.log("VisualEQ Watchdog: Audio stream is active. Starting visualizer.");
-
         if (!isEqLayoutActive) {
             setupVisualEQLayout();
+        } else {
+            startOrRestartEQ();
         }
-        
-        startOrRestartEQ();
     }
 }, 1000);
 })();
