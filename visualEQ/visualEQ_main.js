@@ -7,16 +7,45 @@
 
 (() => {
   // ===================================================================================
-  // VisualEQ v1.2 :: CONFIGURATION
+  // VisualEQ v1.3 :: CONFIGURATION
   // ===================================================================================
+
+  // -----------------------------------------------------------------------------------
+  // SECTION 0: SERVER OWNER DEFAULTS (NEW)
+  // -----------------------------------------------------------------------------------
+  // This section allows the server owner to set the default appearance and behavior
+  // for first-time users or users who have not saved their own settings yet.
+  // Once a user changes a setting in the settings modal, their choice will be saved
+  // and will override these defaults.
+  const SERVER_OWNER_DEFAULTS = {
+    // Should the plugin be enabled by default for new users?
+    // Options: true (on), false (off)
+    DEFAULT_PLUGIN_ENABLED: true,
+
+    // Default theme for the visualizer.
+    // IMPORTANT: You must use the exact theme name from the 'EQ_THEMES' list below.
+    // Example: 'Sunset', 'Server Themecolor', 'Green', 'Synthwave'
+    DEFAULT_THEME_NAME: 'Server Themecolor',
+
+    // Default visualizer mode.
+    // Options: 'Bars', 'LED', 'Spectrum'
+    DEFAULT_VISUALIZER_MODE: 'Bars',
+
+    // Should the peak meter be active by default? (for 'Bars' and 'LED' modes)
+    // Options: true (on), false (off)
+    DEFAULT_SHOW_PEAK_METER: true,
+
+    // Should the grid and frequency labels be shown by default? (for 'Spectrum' mode)
+    // Options: true (on), false (off)
+    DEFAULT_SHOW_SPECTRUM_GRID: true
+  };
+
+
   // This section contains all the settings for the plugin. It is divided into two parts:
   // 1. User-Configurable Settings: Safe to tweak for visual adjustments.
   // 2. Core Plugin Settings: Advanced settings that affect the plugin's logic.
   //    Only change these if you know what you are doing.
   // -----------------------------------------------------------------------------------
-
-  const PLUGIN_VERSION = 'v1.2'; 
-  const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
   // -----------------------------------------------------------------------------------
   // SECTION 1: USER-CONFIGURABLE SETTINGS (Safe to Tweak)
@@ -25,8 +54,18 @@
   // --- General Layout ---
   const MOBILE_BREAKPOINT = 769;      // The screen width (in pixels) below which the plugin will deactivate.
   const SWAP_PTY_AND_TP_ROW = true;   // Set to `true` to place the PTY row at the bottom, `false` for the top.
-  const TP_ROW_SCALE = '0.6';         // The size scale of the TP/TA/Stereo row.
   const INACTIVE_RDS_OPACITY = '0.4'; // The opacity of the 'RDS' text when no RDS PS is detected.
+
+  // --- Row Scaling and Positioning (NEWLY EXPANDED) ---
+  const PTY_ROW_SCALE = '0.8';         // The size scale of the PTY (Program Type) text row.
+  const TP_ROW_SCALE = '0.6';          // The size scale of the TP/TA/Stereo text row.
+
+  // Use these to fine-tune the vertical position of the text rows.
+  // Negative values move the row further away from the center, positive values move it closer.
+  const PTY_ROW_TOP_POSITION = '0px';      // Used when PTY is at the top (SWAP_PTY_AND_TP_ROW = false)
+  const PTY_ROW_BOTTOM_POSITION = '0px';   // Used when PTY is at the bottom (SWAP_PTY_AND_TP_ROW = true)
+  const TP_ROW_TOP_POSITION = '-10px';     // Used when TP is at the top (SWAP_PTY_AND_TP_ROW = true)
+  const TP_ROW_BOTTOM_POSITION = '-10px';  // Used when TP is at the bottom (SWAP_PTY_AND_TP_ROW = false)
 
   // --- Settings Modal ---
   const MODAL_TOP_POSITION = '50%';   // Vertical position of the settings window.
@@ -101,11 +140,15 @@
   // These are the specific FFT (Fast Fourier Transform) sizes for the Web Audio API.
   // Changing these values without understanding the API can break the visualizer.
   const FFT_SIZES = {
-    OFF: 0,
     Low: 1024,
     Medium: 4096,
     High: 8192
   };
+  
+  
+  const PLUGIN_VERSION = 'v1.3'; 
+  const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
+  
   let currentFftSize = FFT_SIZES.Medium;
   let SENSITIVITY = SENSITIVITY_DEFAULT;
   let audioContext, analyser, dataArray;
@@ -118,6 +161,16 @@
   let lastFrameTime = 0;
   let resizeTimeout;
   let currentVisualizerMode = 'Bars';
+  let showSpectrumGrid = true;
+  let isEqLayoutActive = false;
+  let originalFlagsContainerRef = null;
+  let settingsButtonRef = null;
+  let currentThemeIndex = 0;
+
+  // References to original, live DOM elements
+  let ptyElementRef = null;
+  let flagsElementRef = null;
+  let visualEqContainerRef = null;
 
   // ────────────────────────────────────────────────────────────
   // INITIALISERING
@@ -145,86 +198,172 @@
   // ────────────────────────────────────────────────────────────
   // HOVEDOPPSETT
   // ────────────────────────────────────────────────────────────
-  function setupPlugin() {
-    currentThemeIndex = parseInt(localStorage.getItem('visualeqThemeIndex') || '0', 10);
-    let loadedFftSize = parseInt(localStorage.getItem('visualeqFftSize'));
+function setupPlugin() {
+    addVisualEQToggle();
 
-    if (isNaN(loadedFftSize)) {
-    } else {
+    const storedState = localStorage.getItem('visualeqEnabled');
+    const isEnabled = storedState === null
+        ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED
+        : (storedState !== 'false');
+
+    if (!isEnabled) {
+        console.log("VisualEQ is disabled via side menu setting.");
+        return; 
+    }
+
+
+    // --- START: MODIFIED SETTINGS LOADING ---
+
+    // Find the index of the default theme name. Fall back to 0 if not found.
+    let defaultThemeIndex = EQ_THEMES.findIndex(theme => theme.name === SERVER_OWNER_DEFAULTS.DEFAULT_THEME_NAME);
+    if (defaultThemeIndex === -1) {
+        console.warn(`VisualEQ: Default theme name "${SERVER_OWNER_DEFAULTS.DEFAULT_THEME_NAME}" not found. Falling back to the first theme.`);
+        defaultThemeIndex = 0;
+    }
+
+    // Load theme from localStorage, or use the server-defined default.
+    currentThemeIndex = parseInt(localStorage.getItem('visualeqThemeIndex') || defaultThemeIndex.toString(), 10);
+
+    // Load mode from localStorage, or use the server-defined default.
+    currentVisualizerMode = localStorage.getItem('visualeqMode') || SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
+
+    // Load Peak Meter setting. If it's not set ('null'), use the server default. Otherwise, use the stored value.
+    const storedPeak = localStorage.getItem('visualeqShowPeak');
+    showPeakMeter = storedPeak === null ? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER : (storedPeak === 'true');
+
+    // Load Grid setting. If it's not set ('null'), use the server default. Otherwise, use the stored value.
+    const storedGrid = localStorage.getItem('visualeqShowGrid');
+    showSpectrumGrid = storedGrid === null ? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID : (storedGrid !== 'false');
+
+    // --- END: MODIFIED SETTINGS LOADING ---
+
+    let loadedFftSize = parseInt(localStorage.getItem('visualeqFftSize'));
+    if (isNaN(loadedFftSize)) { currentFftSize = FFT_SIZES.Medium; } 
+    else {
         if (loadedFftSize === 2048) {
             currentFftSize = 4096;
             localStorage.setItem('visualeqFftSize', currentFftSize);
-        } else {
-            currentFftSize = loadedFftSize;
-        }
+        } else { currentFftSize = loadedFftSize; }
     }
-	
-    SENSITIVITY = parseFloat(localStorage.getItem('visualeqSensitivity') || SENSITIVITY_DEFAULT);
 
-	showPeakMeter = localStorage.getItem('visualeqShowPeak') === 'true';
-	currentVisualizerMode = localStorage.getItem('visualeqMode') || 'Bars';
+    settingsButtonRef = createSettingsButton();
+    createSettingsModal();
 
-    const styleTag = document.createElement('style');
-    styleTag.innerHTML = `
-      #fmdx-settings-btn:hover { transform: scale(${SETTINGS_BUTTON_SCALE * 1.1}) !important; }
-      #fmdx-modal-close:hover { background-color: rgba(255,255,255,0.2) !important; }
+    setupVisualEQLayout();
+}
+
+function addVisualEQToggle() {
+    const anchorElement = document.getElementById("imperial-units");
+
+    if (!anchorElement) {
+        console.warn("VisualEQ: Could not find the 'imperial-units' anchor element. Cannot add the Enable/Disable switch to the side menu.");
+        return;
+    }
+
+    const id = "visualeq-enable-toggle";
+    const label = "Enable VisualEQ";
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "form-group";
+    wrapper.innerHTML = `
+        <div class="switch flex-container flex-phone flex-phone-column flex-phone-center">
+            <input type="checkbox" tabindex="0" id="${id}" aria-label="${label}" />
+            <label for="${id}"></label>
+            <span class="text-smaller text-uppercase text-bold color-4 p-10">${label.toUpperCase()}</span>
+        </div>
     `;
-    document.head.appendChild(styleTag);
 
-    document.body.addEventListener('click', (event) => {
-      if (event.target.closest('.playbutton')) setTimeout(startOrRestartEQ, 500);
+    anchorElement.closest('.form-group').insertAdjacentElement("afterend", wrapper);
+
+    const storedState = localStorage.getItem('visualeqEnabled');
+    const isEnabled = storedState === null
+        ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED
+        : (storedState !== 'false');
+    document.getElementById(id).checked = isEnabled;
+
+    document.getElementById(id).addEventListener("change", function () {
+        localStorage.setItem("visualeqEnabled", this.checked);
+        window.location.reload();
     });
-    
-    const originalEqContainer = document.getElementById("flags-container-desktop");
+}
+
+function setupVisualEQLayout() {
+    if (isEqLayoutActive) return;
+
     const psContainer = document.getElementById("ps-container");
-    if (!originalEqContainer || !psContainer) return;
-    
-    const ptyElement = originalEqContainer.querySelector(".data-pty");
-    const flagsElement = originalEqContainer.querySelector("h3");
-    if (!ptyElement || !flagsElement) return;
+    const flagsContainer = document.getElementById("flags-container-desktop");
+    if (!psContainer || !flagsContainer) return;
 
-    psContainer.append(ptyElement, flagsElement);
+    ptyElementRef = flagsContainer.querySelector(".data-pty")?.parentElement;
+    flagsElementRef = flagsContainer.querySelector("h3");
+
+    if (ptyElementRef) psContainer.append(ptyElementRef);
+    if (flagsElementRef) psContainer.append(flagsElementRef);
+
+    flagsContainer.style.display = 'none';
+
+    const visualEqContainer = document.createElement('div');
+    visualEqContainer.className = flagsContainer.className; 
+    visualEqContainerRef = visualEqContainer;
+
+    flagsContainer.after(visualEqContainer);
+    
     forceStyle(psContainer, { position: "relative" });
+    const ptyElToStyle = psContainer.querySelector(".data-pty");
+    const flagsElToStyle = psContainer.querySelector("h3");
 
-    const ptyTop = SWAP_PTY_AND_TP_ROW ? { bottom: "0px" } : { top: "0px" };
-    const flagsTop = SWAP_PTY_AND_TP_ROW ? { top: "-10px", transformOrigin: 'top center' } : { bottom: "-10px", transformOrigin: 'bottom center' };
-    Object.assign(ptyElement.style, { position: "absolute", left: "0", right: "0", margin: "0", textAlign: "center", ...ptyTop });
-    Object.assign(flagsElement.style, { position: "absolute", left: "0", right: "0", margin: "0", textAlign: "center", transform: `scale(${TP_ROW_SCALE})`, ...flagsTop });
-    if (flagsElement.querySelector(".stereo-container")) forceStyle(flagsElement.querySelector(".stereo-container"), { position: "relative", top: "17px" });
+    // --- START: MODIFIED STYLING LOGIC ---
+    if (ptyElToStyle && flagsElToStyle) {
+      const ptyStyles = SWAP_PTY_AND_TP_ROW
+        ? { bottom: PTY_ROW_BOTTOM_POSITION, transformOrigin: 'bottom center' }
+        : { top: PTY_ROW_TOP_POSITION, transformOrigin: 'top center' };
 
-    const newEqContainer = document.createElement('div');
-    Object.assign(newEqContainer, { className: originalEqContainer.className, style: originalEqContainer.style.cssText });
-    originalEqContainer.replaceWith(newEqContainer);
-    
-    forceStyle(newEqContainer, { height: `${psContainer.offsetHeight}px`, padding: '0', overflow: 'hidden', position: 'relative' });
-    
+      const flagsStyles = SWAP_PTY_AND_TP_ROW
+        ? { top: TP_ROW_TOP_POSITION, transformOrigin: 'top center' }
+        : { bottom: TP_ROW_BOTTOM_POSITION, transformOrigin: 'bottom center' };
+
+      Object.assign(ptyElToStyle.style, {
+        position: "absolute", left: "0", right: "0", margin: "0", textAlign: "center",
+        transform: `scale(${PTY_ROW_SCALE})`,
+        ...ptyStyles
+      });
+
+      Object.assign(flagsElToStyle.style, {
+        position: "absolute", left: "0", right: "0", margin: "0", textAlign: "center",
+        transform: `scale(${TP_ROW_SCALE})`,
+        ...flagsStyles
+      });
+      
+      if (flagsElToStyle.querySelector(".stereo-container")) forceStyle(flagsElToStyle.querySelector(".stereo-container"), { position: "relative", top: "17px" });
+    }
+    // --- END: MODIFIED STYLING LOGIC ---
+
+    forceStyle(visualEqContainer, { height: `${psContainer.offsetHeight}px`, padding: '0', overflow: 'hidden', position: 'relative' });
     eqCanvas = document.createElement('canvas');
     eqCtx = eqCanvas.getContext('2d');
-    eqCanvas.width = newEqContainer.offsetWidth;
-    eqCanvas.height = newEqContainer.offsetHeight;
-    newEqContainer.appendChild(eqCanvas);
-    
+    eqCanvas.width = visualEqContainer.offsetWidth;
+    eqCanvas.height = visualEqContainer.offsetHeight;
+    visualEqContainer.appendChild(eqCanvas);
+    visualEqContainer.append(settingsButtonRef);
+    forceStyle(settingsButtonRef, { opacity: '0' });
+    visualEqContainer.onmouseover = () => forceStyle(settingsButtonRef, { opacity: '1' });
+    visualEqContainer.onmouseout = () => forceStyle(settingsButtonRef, { opacity: '0' });
     const rdsIndicator = document.createElement('span');
     rdsIndicator.textContent = 'RDS';
     rdsIndicator.className = 'data-tp';
     forceStyle(rdsIndicator, { display: 'inline', margin: '0 15px', opacity: INACTIVE_RDS_OPACITY });
-    flagsElement.querySelector('.data-ms')?.after(rdsIndicator);
-    
+    flagsElToStyle?.querySelector('.data-ms')?.after(rdsIndicator);
     const psTextElement = document.getElementById('data-ps');
     if (psTextElement) {
         new MutationObserver(() => {
             forceStyle(rdsIndicator, { opacity: psTextElement.textContent.trim() ? '1' : INACTIVE_RDS_OPACITY });
         }).observe(psTextElement, { childList: true, characterData: true, subtree: true });
     }
-    
-    const settingsButton = createSettingsButton();
-    newEqContainer.append(settingsButton);
-    newEqContainer.onmouseover = () => forceStyle(settingsButton, { opacity: '1' });
-    newEqContainer.onmouseout = () => forceStyle(settingsButton, { opacity: '0' });
 
-    createSettingsModal();
-    startOrRestartEQ();
-  }
+    isEqLayoutActive = true;
+    // NOTE: The call to startOrRestartEQ() was removed from here to prevent a race condition.
+    // The watchdog setInterval will safely start the visualizer when the audio stream is ready.
+}
 
   // ────────────────────────────────────────────────────────────
   // UI-ELEMENTER
@@ -251,149 +390,68 @@
     return settingsButton;
   }
 
-  function createSettingsModal() {
+function teardownVisualEQLayout() {
+    if (!isEqLayoutActive) return;
+
+    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+    analyser = null;
+
+    const originalContainer = document.getElementById("flags-container-desktop");
+    const ptyEl = ptyElementRef;
+    const flagsEl = flagsElementRef;
+    const ourContainer = visualEqContainerRef;
+
+    if (!originalContainer || !ptyEl || !flagsEl || !ourContainer) return;
+
+    ptyEl.removeAttribute('style');
+    flagsEl.removeAttribute('style');
+    const stereoEl = flagsEl.querySelector(".stereo-container");
+    if (stereoEl) stereoEl.removeAttribute('style');
+    flagsEl.querySelector('.data-tp[style*="display: inline"]')?.remove();
+
+
+    originalContainer.append(ptyEl);
+    originalContainer.append(flagsEl);
+
+    ourContainer.remove();
+
+    originalContainer.style.display = '';
+
+    ptyElementRef = null;
+    flagsElementRef = null;
+    visualEqContainerRef = null;
+    isEqLayoutActive = false;
+}
+
+function createSettingsModal() {
     if (document.getElementById('fmdx-settings-modal-overlay')) return;
+
     const modalStyles = document.createElement('style');
     modalStyles.innerHTML = `
-      #visualeq-sensitivity-slider {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 100%;
-        height: 6px;
-        background: var(--color-2, #555);
-        border-radius: 3px;
-        outline: none;
-        padding: 0;
-        margin-top: 0.6em;
-      }
-      #visualeq-sensitivity-slider::-webkit-slider-thumb {
-        -webkit-appearance: none;
-        appearance: none;
-        width: 18px;
-        height: 18px;
-        background: var(--color-4, #E6C269);
-        border-radius: 50%;
-        cursor: pointer;
-        border: 2px solid var(--color-1, #111);
-        transition: transform 0.2s ease;
-      }
-      #visualeq-sensitivity-slider::-moz-range-thumb {
-        width: 18px;
-        height: 18px;
-        background: var(--color-4, #E6C269);
-        border-radius: 50%;
-        cursor: pointer;
-        border: 2px solid var(--color-1, #111);
-        transition: transform 0.2s ease;
-      }
-      #visualeq-sensitivity-slider:hover::-webkit-slider-thumb {
-        transform: scale(1.1);
-      }
-      #visualeq-sensitivity-slider:hover::-moz-range-thumb {
-        transform: scale(1.1);
-      }
-      .visualeq-modal-content {
-        background: var(--color-0, #121010);
-        color: var(--color-3, #FFF);
-        border: 1px solid var(--color-2, #333);
-      }
-      .visualeq-modal-content .header {
-        background: var(--color-1, #2A2A2A);
-        padding: 20px 25px;
-        border-bottom: 1px solid var(--color-1, #333);
-      }
-      .visualeq-modal-content h2 {
-        color: var(--color-3, #FFF);
-        font-size: 1.5em;
-        margin: 0;
-      }
-      .visualeq-modal-content .header a {
-        color: var(--color-3, #FFF);
-        opacity: 0.6;
-      }
-      .visualeq-modal-content select {
-        width: 100%;
-        padding: 0.8em;
-        background: var(--color-2, #333);
-        color: var(--color-3, #FFF);
-        border: 1px solid var(--color-1, #444);
-        border-radius: 4px;
-        font-size: 1em;
-      }
-      .visualeq-modal-content label {
-        display: block;
-        margin-bottom: 0.6em;
-        font-weight: bold;
-        color: var(--color-4, #E6C269); /* Accent color for labels */
-        text-transform: uppercase;
-        font-size: 0.9em;
-      }
-      .visualeq-modal-content .help-section hr {
-         border: none; 
-         border-top: 1px solid var(--color-2, #444);
-         opacity: 0.8; 
-         margin: 2em 0;
-      }
-       .visualeq-modal-content .help-section p {
-        color: var(--color-3, #FFF);
-        opacity: 0.8;
-       }
-      #fmdx-modal-close-visualeq {
-        background: var(--color-2, rgba(255,255,255,0.1));
-        color: var(--color-3, #FFF);
-        transition: background-color 0.2s, transform 0.2s;
-      }
-      #fmdx-modal-close-visualeq:hover {
-        background: var(--color-4, #E6C269);
-        color: var(--color-1, #111);
-        transform: rotate(90deg);
-      }
-      .visualeq-checkbox-container {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-top: 1.5em;
-        padding: 0.8em;
-        background-color: var(--color-2, #2A2A2A);
-        border-radius: 4px;
-        border: 1px solid var(--color-1, #444);
-      }
-      .visualeq-checkbox-container label {
-        color: var(--color-4, #E6C269);
-        text-transform: uppercase;
-        font-size: 0.9em;
-        margin-bottom: 0;
-      }
-      .visualeq-switch {
-        position: relative;
-        display: inline-block;
-        width: 44px;
-        height: 24px;
-      }
+      #visualeq-sensitivity-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; background: var(--color-2, #555); border-radius: 3px; outline: none; padding: 0; margin-top: 0.6em; }
+      #visualeq-sensitivity-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: var(--color-4, #E6C269); border-radius: 50%; cursor: pointer; border: 2px solid var(--color-1, #111); transition: transform 0.2s ease; }
+      #visualeq-sensitivity-slider::-moz-range-thumb { width: 18px; height: 18px; background: var(--color-4, #E6C269); border-radius: 50%; cursor: pointer; border: 2px solid var(--color-1, #111); transition: transform 0.2s ease; }
+      #visualeq-sensitivity-slider:hover::-webkit-slider-thumb { transform: scale(1.1); }
+      #visualeq-sensitivity-slider:hover::-moz-range-thumb { transform: scale(1.1); }
+      .visualeq-modal-content { background: var(--color-0, #121010); color: var(--color-3, #FFF); border: 1px solid var(--color-2, #333); }
+      .visualeq-modal-content .header { background: var(--color-1, #2A2A2A); padding: 10px 15px; border-bottom: 1px solid var(--color-2, #333); }
+      .visualeq-modal-content h2 { color: var(--color-3, #FFF); font-size: 1.5em; margin: 0; }
+      .visualeq-modal-content .header a { color: var(--color-3, #FFF); opacity: 0.6; }
+      .visualeq-modal-content select { width: 100%; padding: 0.8em; background: var(--color-2, #333); color: var(--color-3, #FFF); border: 1px solid var(--color-1, #444); border-radius: 4px; font-size: 1em; }
+      .visualeq-modal-content label { display: block; margin-bottom: 0.6em; font-weight: bold; color: var(--color-4, #E6C269); text-transform: uppercase; font-size: 0.9em; }
+      .visualeq-modal-content .help-section hr { border: none; border-top: 1px solid var(--color-2, #444); opacity: 0.8; margin: 2em 0; }
+      .visualeq-modal-content .help-section p { color: var(--color-3, #FFF); opacity: 0.8; }
+      #fmdx-modal-close-visualeq { background: var(--color-2, rgba(255,255,255,0.1)); color: var(--color-3, #FFF); transition: background-color 0.2s, transform 0.2s; }
+      #fmdx-modal-close-visualeq:hover { background: var(--color-4, #E6C269); color: var(--color-1, #111); transform: rotate(90deg); }
+      .visualeq-checkbox-container { display: flex; align-items: center; justify-content: space-between; margin-top: 1.5em; padding: 0.8em; background-color: var(--color-2, #2A2A2A); border-radius: 4px; border: 1px solid var(--color-1, #444); }
+      .visualeq-checkbox-container label { color: var(--color-4, #E6C269); text-transform: uppercase; font-size: 0.9em; margin-bottom: 0; }
+      .visualeq-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
       .visualeq-switch input { display: none; }
-      .visualeq-slider {
-        position: absolute;
-        cursor: pointer;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background-color: var(--color-1, #ccc);
-        transition: .4s;
-        border-radius: 24px;
-      }
-      .visualeq-slider:before {
-        position: absolute;
-        content: "";
-        height: 18px; width: 18px;
-        left: 3px; bottom: 3px;
-        background-color: white;
-        transition: .4s;
-        border-radius: 50%;
-      }
-      input:checked + .visualeq-slider {
-        background-color: var(--color-4, #2196F3);
-      }
-      input:checked + .visualeq-slider:before {
-        transform: translateX(20px);
-      }
+      .visualeq-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--color-1, #ccc); transition: .4s; border-radius: 24px; }
+      .visualeq-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+      input:checked + .visualeq-slider { background-color: var(--color-4, #2196F3); }
+      input:checked + .visualeq-slider:before { transform: translateX(20px); }
     `;
     document.head.appendChild(modalStyles);
 
@@ -407,7 +465,7 @@
         position: 'absolute', top: MODAL_TOP_POSITION, left: MODAL_LEFT_POSITION,
         transform: 'translate(-50%, -50%)', 
         padding: '0', borderRadius: '8px',
-        width: '340px', height: '340px',
+        width: '340px', maxHeight: '90vh',
         display: 'flex', flexDirection: 'column',
         overflow: 'hidden', fontSize: `calc(1rem * ${MODAL_TEXT_SCALE})`
     });
@@ -415,12 +473,13 @@
     const header = document.createElement('div');
     header.className = 'header';
     header.innerHTML = `
-      <div>
-        <h2>EQ Settings</h2>
-        <a href="${GITHUB_URL}" target="_blank" style="text-decoration: none; cursor: pointer;">
-          <!-- ENDRING: Lagt til id="visualeq-version-info" -->
-          <p id="visualeq-version-info" style="margin: 4px 0 0; font-size: 0.9em;">VisualEQ ${PLUGIN_VERSION}</p>
-        </a>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h2>EQ Settings</h2>
+          <a href="${GITHUB_URL}" target="_blank" style="text-decoration: none; cursor: pointer;">
+            <p id="visualeq-version-info" style="margin: 4px 0 0; font-size: 0.9em;">VisualEQ ${PLUGIN_VERSION}</p>
+          </a>
+        </div>
       </div>`;
     
     const closeButton = document.createElement('button');
@@ -436,6 +495,7 @@
     
     const scrollableArea = document.createElement('div');
     forceStyle(scrollableArea, { overflowY: 'auto', padding: '25px', flex: '1 1 auto' });
+
     
     const themeSelect = document.createElement('select');
     EQ_THEMES.forEach((theme, index) => themeSelect.innerHTML += `<option value="${index}" ${index === currentThemeIndex ? 'selected' : ''}>${theme.name}</option>`);
@@ -443,23 +503,6 @@
     
     const qualitySelect = document.createElement('select');
     Object.keys(FFT_SIZES).forEach(key => qualitySelect.innerHTML += `<option value="${FFT_SIZES[key]}" ${FFT_SIZES[key] === currentFftSize ? 'selected' : ''}>${key}</option>`);
-    qualitySelect.onchange = () => { currentFftSize = parseInt(qualitySelect.value, 10); localStorage.setItem('visualeqFftSize', currentFftSize); startOrRestartEQ(); };
-    
-	const modeSelect = document.createElement('select');
-    VISUALIZER_MODES.forEach(mode => {
-      modeSelect.innerHTML += `<option value="${mode}" ${mode === currentVisualizerMode ? 'selected' : ''}>${mode}</option>`;
-    });
-    modeSelect.onchange = (e) => {
-      currentVisualizerMode = e.target.value;
-      localStorage.setItem('visualeqMode', currentVisualizerMode);
-    };
-	
-    const sensitivitySlider = document.createElement('input');
-    sensitivitySlider.id = 'visualeq-sensitivity-slider';
-    Object.assign(sensitivitySlider, { type: 'range', min: SENSITIVITY_MIN, max: SENSITIVITY_MAX, step: 0.1, value: SENSITIVITY });
-    
-    const peakMeterToggle = document.createElement('input');
-    Object.assign(peakMeterToggle, { type: 'checkbox', id: 'visualeq-peak-toggle', checked: showPeakMeter });
     
     const peakMeterContainer = document.createElement('div');
     peakMeterContainer.className = 'visualeq-checkbox-container';
@@ -469,11 +512,51 @@
         <input type="checkbox" id="visualeq-peak-toggle-input" ${showPeakMeter ? 'checked' : ''}>
         <span class="visualeq-slider"></span>
       </label>`;
-      
     peakMeterContainer.querySelector('#visualeq-peak-toggle-input').onchange = (e) => {
         showPeakMeter = e.target.checked;
         localStorage.setItem('visualeqShowPeak', showPeakMeter);
     };
+
+    const sensitivitySlider = document.createElement('input');
+    sensitivitySlider.id = 'visualeq-sensitivity-slider';
+    Object.assign(sensitivitySlider, { type: 'range', min: SENSITIVITY_MIN, max: SENSITIVITY_MAX, step: 0.1, value: SENSITIVITY });
+
+
+    const gridToggleContainer = document.createElement('div');
+    gridToggleContainer.className = 'visualeq-checkbox-container';
+    gridToggleContainer.innerHTML = `
+      <label for="visualeq-grid-toggle-input">Show Grid & Labels</label>
+      <label class="visualeq-switch">
+        <input type="checkbox" id="visualeq-grid-toggle-input" ${showSpectrumGrid ? 'checked' : ''}>
+        <span class="visualeq-slider"></span>
+      </label>`;
+    gridToggleContainer.querySelector('#visualeq-grid-toggle-input').onchange = (e) => {
+        showSpectrumGrid = e.target.checked;
+        localStorage.setItem('visualeqShowGrid', showSpectrumGrid);
+    };
+
+    const modeSelect = document.createElement('select');
+    VISUALIZER_MODES.forEach(mode => {
+      modeSelect.innerHTML += `<option value="${mode}" ${mode === currentVisualizerMode ? 'selected' : ''}>${mode}</option>`;
+    });
+
+    const handleModeChange = (selectedMode) => {
+        currentVisualizerMode = selectedMode;
+        localStorage.setItem('visualeqMode', currentVisualizerMode);
+        gridToggleContainer.style.display = (selectedMode === 'Spectrum') ? 'flex' : 'none';
+    };
+    
+    modeSelect.onchange = (e) => handleModeChange(e.target.value);
+    handleModeChange(currentVisualizerMode); 
+
+
+qualitySelect.onchange = () => {
+    const newFftSize = parseInt(qualitySelect.value, 10);
+    localStorage.setItem('visualeqFftSize', newFftSize);
+    currentFftSize = newFftSize;
+
+    startOrRestartEQ();
+};
 
     const helpSection = document.createElement('div');
     helpSection.className = 'help-section';
@@ -508,24 +591,26 @@
     const sensitivityContainer = document.createElement('div');
     forceStyle(sensitivityContainer, { marginTop: '1.5em' });
     sensitivityContainer.append(sensLabelEl, sensitivitySlider);
-    
+
     scrollableArea.append(
         createControlSection('Theme', themeSelect),
-		createControlSection('Visualizer Mode', modeSelect, '1.5em'),
+        createControlSection('Visualizer Mode', modeSelect, '1.5em'),
+        gridToggleContainer, 
         createControlSection('Analyser Quality', qualitySelect, '1.5em'),
-		peakMeterContainer,
+        peakMeterContainer,
         sensitivityContainer,
         helpSection
     );
     
-    modalContent.append(header, scrollableArea, closeButton);
+    modalContent.append(header, scrollableArea);
+    header.append(closeButton);
     modalOverlay.appendChild(modalContent);
     document.body.appendChild(modalOverlay);
 
     const closeModal = () => modalOverlay.style.display = 'none';
     modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeModal(); };
     closeButton.onclick = closeModal;
-  }
+}
 
 async function checkForUpdates() {
     try {
@@ -534,34 +619,37 @@ async function checkForUpdates() {
 
         const owner = match[1];
         const repo = match[2];
-        
-        const baseUrl = `https://cdn.jsdelivr.net/gh/${owner}/${repo}@main/visualeq.js`;
-        const scriptUrl = baseUrl + '?t=' + new Date().getTime();
 
-        const response = await fetch(scriptUrl, { cache: 'no-cache' });
-        if (!response.ok) return;
+        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/visualeq.js`;
+
+        const response = await fetch(apiUrl, {
+            headers: { 'Accept': 'application/vnd.github.v3.raw' }
+        });
+        
+        if (!response.ok) {
+            console.log('VisualEQ: GitHub API request failed.', response.status);
+            return;
+        }
 
         const scriptContent = await response.text();
-        const versionRegex = /version:\s*['"]([^'"]+)['"]/;
+        
+        const versionRegex = /version:\s*['"]([\d\.]+)['"]/;
         const versionMatch = scriptContent.match(versionRegex);
 
         if (versionMatch && versionMatch[1]) {
             const latestVersion = versionMatch[1];
 
-            // ENDRING HER: Bruk den nye, smarte sammenligningen
-            // Viser kun melding hvis versjonen på GitHub er nyere enn den installerte.
             if (compareVersions(latestVersion, PLUGIN_VERSION) > 0) {
                 const versionElement = document.getElementById('visualeq-version-info');
                 if (versionElement) {
                     if (!versionElement.textContent.includes('New version available')) {
-                        // Legg til 'v' foran for en penere visning
                         versionElement.innerHTML += ` <span style="color: var(--color-4, #ffcc00); opacity: 0.8;">(New version available: v${latestVersion})</span>`;
                     }
                 }
             }
         }
     } catch (error) {
-        console.log('VisualEQ: Could not check for updates.', error);
+        console.log('VisualEQ: Could not check for updates via GitHub API.', error);
     }
 }
 
@@ -592,20 +680,14 @@ function compareVersions(v1, v2) {
   }
 
 function startOrRestartEQ() {
-    if (currentFftSize === FFT_SIZES.OFF) {
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-      showStandbyText();
-      return;
-    }
-    
-    if (typeof Stream === 'undefined' || !Stream.Fallback?.Player?.Amplification) {
-      setTimeout(startOrRestartEQ, 500); 
-      return; 
-    }
-
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
+    
+    // Safety check in case this is called too early
+    if (typeof Stream === 'undefined' || !Stream.Fallback || !Stream.Fallback.Audio) {
+        console.warn("VisualEQ: Attempted to start EQ, but audio stream is not ready. Watchdog will handle it.");
+        return;
+    }
     
     audioContext = Stream.Fallback.Audio;
     if (audioContext.state === 'suspended') audioContext.resume();
@@ -617,82 +699,59 @@ function startOrRestartEQ() {
     Object.assign(analyser, { fftSize: currentFftSize, smoothingTimeConstant: 0.6 });
     dataArray = new Uint8Array(analyser.frequencyBinCount);
     
-	if (currentBarHeights.length === 0) {
-      currentBarHeights = new Array(20).fill(0);
-      peakHeights = new Array(20).fill(0);
-      peakHoldTimers = new Array(20).fill(0);
+    const numBands = currentVisualizerMode === 'Spectrum' ? 40 : 20;
+    if (currentBarHeights.length !== numBands) {
+      currentBarHeights = new Array(numBands).fill(0);
+      peakHeights = new Array(numBands).fill(0);
+      peakHoldTimers = new Array(numBands).fill(0);
     }
     
     liveAudioPlayer.Amplification.connect(analyser);
     lastFrameTime = performance.now();
     animationFrameId = requestAnimationFrame(drawEQ);
-  }
+}
 
-  const bandRanges = [ { start: 1, end: 1 }, { start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 8 }, { start: 9, end: 12 }, { start: 13, end: 17 }, { start: 18, end: 24 }, { start: 25, end: 33 }, { start: 34, end: 45 }, { start: 46, end: 62 }, { start: 63, end: 84 }, { start: 85, end: 112 }, { start: 113, end: 148 }, { start: 149, end: 195 }, { start: 196, end: 256 }, { start: 257, end: 330 }, { start: 331, end: 420 }, { start: 421, end: 530 }, { start: 531, end: 660 }, { start: 661, end: 800 } ];
-
-  const bandRanges40 = (() => {
-    const ranges = [];
-    const maxIndex = 1023;
-    let lastIndex = 1;
-    for (let i = 0; i < 40; i++) {
-        const endIndex = Math.floor(Math.pow(maxIndex, (i + 1) / 40));
-        const startIndex = Math.max(lastIndex, 1);
-        if (startIndex <= endIndex) {
-            ranges.push({ start: startIndex, end: endIndex });
-        }
-        lastIndex = endIndex + 1;
-    }
-    return ranges;
-  })();
+const bandRanges_20_bands_definition = [ { start: 1, end: 1 }, { start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 8 }, { start: 9, end: 12 }, { start: 13, end: 17 }, { start: 18, end: 24 }, { start: 25, end: 33 }, { start: 34, end: 45 }, { start: 46, end: 62 }, { start: 63, end: 84 }, { start: 85, end: 112 }, { start: 113, end: 148 }, { start: 149, end: 195 }, { start: 196, end: 256 }, { start: 257, end: 330 }, { start: 331, end: 420 }, { start: 421, end: 530 }, { start: 531, end: 660 }, { start: 661, end: 800 } ];
 	
 function calculateBandLevels(numBands) {
   if (!dataArray || !audioContext) return new Array(numBands).fill(0);
 
   if (numBands === 20) {
+    const definition = bandRanges_20_bands_definition;
     if (dataArray.length < 801) { 
         const scale = dataArray.length / 801;
-        return bandRanges.map(range => {
+        return definition.map(range => {
             let sum = 0;
             const start = Math.floor(range.start * scale);
             const end = Math.floor(range.end * scale);
             for (let i = start; i <= end; i++) sum += dataArray[i] || 0;
-            return sum / (end - start + 1);
+            return sum / ((end - start + 1) || 1);
         });
     }
-    return bandRanges.map(range => {
+    return definition.map(range => {
       let sum = 0;
       for (let i = range.start; i <= range.end; i++) sum += dataArray[i] || 0;
-      return sum / (range.end - range.start + 1);
+      return sum / ((range.end - range.start + 1) || 1);
     });
   }
   
-
   const levels = [];
-  
-
   const targetFrequencyCutoff = 16000;
-
   const maxPossibleFrequency = audioContext.sampleRate / 2;
-
-
   const maxIndex = Math.min(
       dataArray.length - 1,
       Math.floor((targetFrequencyCutoff / maxPossibleFrequency) * dataArray.length)
   );
 
   let lastIndex = 1;
-
   for (let i = 0; i < numBands; i++) {
     let endIndex = Math.floor(Math.pow(maxIndex, (i + 1) / numBands));
     const startIndex = Math.max(lastIndex, 1);
-    
-    if (endIndex < startIndex) {
-        endIndex = startIndex;
-    }
+    if (endIndex < startIndex) { endIndex = startIndex; }
     
     let sum = 0;
     let count = 0;
-    if (startIndex <= endIndex && startIndex < dataArray.length) { 
+    if (startIndex <= endIndex && startIndex < dataArray.length) {
         for (let j = startIndex; j <= endIndex; j++) {
             sum += dataArray[j] || 0;
             count++;
@@ -705,8 +764,8 @@ function calculateBandLevels(numBands) {
 }
 
 function drawEQ(currentTime) {
-  if (!analyser || audioContext.state !== 'running') {
-      if (currentBarHeights.every(h => h === 0)) {
+  if (!analyser || (audioContext && audioContext.state !== 'running')) {
+      if (currentBarHeights.every(h => h === 0) && peakHeights.every(h => h === 0)) {
           animationFrameId = null;
           return;
       }
@@ -716,7 +775,7 @@ function drawEQ(currentTime) {
   lastFrameTime = currentTime;
   
   let bandLevels;
-  if (analyser && audioContext.state === 'running') {
+  if (analyser && audioContext && audioContext.state === 'running') {
       analyser.getByteFrequencyData(dataArray);
       const numBands = currentVisualizerMode === 'Spectrum' ? 40 : 20;
       bandLevels = calculateBandLevels(numBands);
@@ -759,8 +818,11 @@ function drawModeBars(bandLevels, deltaTime) {
   bandLevels.forEach((level, i) => {
     let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
     if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
+    
+    // KORREKT FALL-LOGIKK
     currentBarHeights[i] = targetHeight > currentBarHeights[i] ? targetHeight : Math.max(0, currentBarHeights[i] - (FALL_SPEED * deltaTime));
-    const finalVisibleHeight = MINIMUM_BAR_HEIGHT + (currentBarHeights[i] || 0);
+    
+    const finalVisibleHeight = MINIMUM_BAR_HEIGHT + currentBarHeights[i];
     const x = HORIZONTAL_MARGIN + i * (barWidth + BAR_SPACING);
     const y = eqCanvas.height - finalVisibleHeight;
     
@@ -777,23 +839,23 @@ function drawModeBars(bandLevels, deltaTime) {
     eqCtx.fill();
 
     if (showPeakMeter) {
-      if (currentBarHeights[i] >= peakHeights[i]) {
-        peakHeights[i] = currentBarHeights[i];
-        peakHoldTimers[i] = performance.now();
-      } else {
-        if (performance.now() - peakHoldTimers[i] > PEAK_HOLD_TIME) {
-          peakHeights[i] = Math.max(0, peakHeights[i] - (PEAK_FALL_SPEED * deltaTime));
+        if (currentBarHeights[i] >= peakHeights[i]) {
+            peakHeights[i] = currentBarHeights[i];
+            peakHoldTimers[i] = performance.now();
+        } else {
+            if (performance.now() - peakHoldTimers[i] > PEAK_HOLD_TIME) {
+            peakHeights[i] = Math.max(0, peakHeights[i] - (PEAK_FALL_SPEED * deltaTime));
+            }
         }
-      }
-      if (peakHeights[i] > 0) {
-          const peakY = eqCanvas.height - peakHeights[i] - PEAK_BAR_HEIGHT;
-          if (peakY < y - PEAK_BAR_HEIGHT) {
-            eqCtx.fillStyle = fillStyle;
-            eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
-            eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-            eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
-          }
-      }
+        if (peakHeights[i] > 0) {
+            const peakY = eqCanvas.height - peakHeights[i] - PEAK_BAR_HEIGHT;
+            if (peakY < y - PEAK_BAR_HEIGHT) {
+                eqCtx.fillStyle = fillStyle;
+                eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
+                eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
+            }
+        }
     }
   });
 }
@@ -809,14 +871,21 @@ function drawModeLed(bandLevels, deltaTime) {
   bandLevels.forEach((level, i) => {
     let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
     if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
+
     currentBarHeights[i] = targetHeight > currentBarHeights[i] ? targetHeight : Math.max(0, currentBarHeights[i] - (FALL_SPEED * deltaTime));
 
-    const litBlocks = Math.round((currentBarHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
+    const litBlocks = Math.ceil((currentBarHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
     const x = HORIZONTAL_MARGIN + i * (barWidth + BAR_SPACING);
+
+    if (litBlocks === 0) {
+        const y = eqCanvas.height - (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
+        eqCtx.fillStyle = 'rgba(128, 128, 128, 0.15)'; 
+        eqCtx.fillRect(x, y, barWidth, blockHeight);
+    }
 
     for (let j = 0; j < LED_BLOCK_COUNT; j++) {
       if (j < litBlocks) {
-        const y = eqCanvas.height - (j + 1) * (blockHeight + LED_BLOCK_SPACING);
+        const y = eqCanvas.height - (j + 1) * (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
         let color;
         const percent = j / LED_BLOCK_COUNT;
         if(activeTheme.colors.length >= 3) {
@@ -844,12 +913,10 @@ function drawModeLed(bandLevels, deltaTime) {
             peakHeights[i] = Math.max(0, peakHeights[i] - (PEAK_FALL_SPEED * deltaTime));
             }
         }
-        
-        const peakBlock = Math.round((peakHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
+        const peakBlock = Math.ceil((peakHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
         if (peakBlock > 0 && peakBlock > litBlocks) {
-            const peakY = eqCanvas.height - (peakBlock) * (blockHeight + LED_BLOCK_SPACING);
+            const peakY = eqCanvas.height - (peakBlock) * (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
             const peakColor = activeTheme.colors[activeTheme.colors.length -1] || '#ff0000';
-            
             eqCtx.fillStyle = peakColor;
             eqCtx.fillRect(x, peakY, barWidth, blockHeight);
             eqCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
@@ -859,10 +926,72 @@ function drawModeLed(bandLevels, deltaTime) {
   });
 }
 
+function drawSpectrumGrid(bandLevels) {
+    eqCtx.save();
+
+    const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
+    const spacing = totalDrawingWidth / (bandLevels.length - 1);
+
+    eqCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    eqCtx.lineWidth = 0.5;
+    eqCtx.setLineDash([4, 4]);
+
+    for (let i = 1; i <= 3; i++) {
+        const y = eqCanvas.height * (i * 0.25);
+        eqCtx.beginPath();
+        eqCtx.moveTo(0, y);
+        eqCtx.lineTo(eqCanvas.width, y);
+        eqCtx.stroke();
+    }
+
+    const bandsPerZone = 4;
+    for (let i = bandsPerZone; i < bandLevels.length; i += bandsPerZone) {
+        const x = HORIZONTAL_MARGIN + i * spacing;
+        eqCtx.beginPath();
+        eqCtx.moveTo(x, 0);
+        eqCtx.lineTo(x, eqCanvas.height);
+        eqCtx.stroke();
+    }
+    
+    eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    eqCtx.font = '10px Arial';
+    eqCtx.setLineDash([]);
+    eqCtx.textAlign = 'center';
+
+    eqCtx.textAlign = 'left';
+    eqCtx.textBaseline = 'bottom';
+    for (let i = 1; i <= 3; i++) {
+        const y = eqCanvas.height * (i * 0.25);
+        const text = `${100 - (i * 25)}%`;
+        eqCtx.fillText(text, 5, y - 2);
+    }
+
+    const freqLabels = ['125', '250', '500', '1k', '2k', '4k', '6k', '8k', '12k'];
+    eqCtx.textAlign = 'center';
+    
+    for (let i = 0; i < freqLabels.length; i++) {
+        const bandIndex = (i + 1) * bandsPerZone;
+        const x = HORIZONTAL_MARGIN + bandIndex * spacing;
+        
+        if ((i + 1) % 2 === 0) { 
+            eqCtx.textBaseline = 'top';
+            eqCtx.fillText(freqLabels[i], x, 5);
+        } else { 
+            eqCtx.textBaseline = 'bottom';
+            eqCtx.fillText(freqLabels[i], x, eqCanvas.height - 5);
+        }
+    }
+    
+    eqCtx.restore();
+}
+
 function drawModeSpectrum(bandLevels) {
+  if (showSpectrumGrid) {
+    drawSpectrumGrid(bandLevels);
+  }
+
   const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
   const spacing = totalDrawingWidth / (bandLevels.length - 1);
-  
   const activeTheme = EQ_THEMES[currentThemeIndex];
   let strokeStyle;
   
@@ -894,4 +1023,41 @@ function drawModeSpectrum(bandLevels) {
   
   eqCtx.stroke();
 }
+
+setInterval(() => {
+    const storedState = localStorage.getItem('visualeqEnabled');
+    const isEnabled = storedState === null
+        ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED
+        : (storedState !== 'false');
+
+    if (!isEnabled) {
+      if(isEqLayoutActive) teardownVisualEQLayout();
+        return; 
+    }
+
+    if (currentFftSize === FFT_SIZES.OFF) {
+        return;
+    }
+
+    if (animationFrameId !== null) {
+        if (typeof Stream === 'undefined' || !Stream.Fallback || !Stream.Fallback.Audio || Stream.Fallback.Audio.state !== 'running') {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            animationFrameId = null;
+            analyser = null;
+            if (isEqLayoutActive) showStandbyText();
+            console.log("VisualEQ Watchdog: Audio stream stopped. Resetting.");
+        }
+        return;
+    }
+
+    if (typeof Stream !== 'undefined' && Stream.Fallback && Stream.Fallback.Audio && Stream.Fallback.Audio.state === 'running') {
+        console.log("VisualEQ Watchdog: Audio stream is active. Starting visualizer.");
+
+        if (!isEqLayoutActive) {
+            setupVisualEQLayout();
+        }
+        
+        startOrRestartEQ();
+    }
+}, 1000);
 })();
