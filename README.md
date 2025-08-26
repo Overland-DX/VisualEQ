@@ -1,6 +1,6 @@
 # VisualEQ for fm-dx-webserver
 
-![Version](https://img.shields.io/badge/version-1.2-blue)
+![Version](https://img.shields.io/badge/version-1.3-blue)
 ![Compatibility](https://img.shields.io/badge/fm--dx--webserver-v1.3.9-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -11,7 +11,20 @@ A customizable 20-band visual equalizer and UI enhancement plugin for the fm-dx 
 ### Screenshot
 
 
-<img width="2106" height="622" alt="bilde" src="https://github.com/user-attachments/assets/951dd17e-10e2-4080-8863-e6076dd296bd" />
+<img width="2106" height="602" alt="bilde" src="https://github.com/user-attachments/assets/051e1535-6062-4300-8c24-a988fba7e3ce" />
+<br>
+
+---
+
+<img width="2125" height="628" alt="bilde" src="https://github.com/user-attachments/assets/7f40acea-78bc-4ecf-87e6-1cc40d85a427" />
+<br>
+
+---
+
+<img width="2110" height="617" alt="bilde" src="https://github.com/user-attachments/assets/a22714ee-b800-4705-917a-ff405b7f96f5" />
+
+
+
 
 
 ---
