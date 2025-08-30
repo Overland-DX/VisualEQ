@@ -351,6 +351,7 @@ function setupVisualEQLayout() {
             position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center',
             transform: `translateY(-50%) scale(${PS_ROW_SCALE}) translateY(${PS_ROW_VERTICAL_OFFSET})`
         });
+		forceStyle(psTextElement, { fontWeight: 'bold' });
         forceStyle(ptyElement, {
             position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center',
             transform: `scale(${PTY_ROW_SCALE}) translateY(${PTY_ROW_VERTICAL_OFFSET})`,
@@ -1132,3 +1133,4 @@ setInterval(() => {
     }
 }, 1000);
 })();
+
