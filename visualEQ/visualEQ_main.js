@@ -1,4 +1,3 @@
-// VisualEQ - Combined PTY Relocation and 20-Band Equalizer
 // -----------------------------------------------------------
 // Credit: The method for connecting to the audio stream via
 // Stream.Fallback.Player.Amplification was first demonstrated
@@ -6,286 +5,294 @@
 // -----------------------------------------------------------
 
 (() => {
-  // ===================================================================================
-  // VisualEQ v1.3.1 :: CONFIGURATION
-  // ===================================================================================
+    // ===================================================================================
+    // VisualEQ v1.4 :: CONFIGURATION
+    // ===================================================================================
 
-  // -----------------------------------------------------------------------------------
-  // SECTION 0: SERVER OWNER DEFAULTS (NEW)
-  // -----------------------------------------------------------------------------------
-  // This section allows the server owner to set the default appearance and behavior
-  // for first-time users or users who have not saved their own settings yet.
-  // Once a user changes a setting in the settings modal, their choice will be saved
-  // and will override these defaults.
-  const SERVER_OWNER_DEFAULTS = {
-    // Should the plugin be enabled by default for new users?
-    // Options: true (on), false (off)
-    DEFAULT_PLUGIN_ENABLED: true,
+    // -----------------------------------------------------------------------------------
+    // SECTION 0: SERVER OWNER DEFAULTS (NEW)
+    // -----------------------------------------------------------------------------------
+    // This section allows the server owner to set the default appearance and behavior
+    // for first-time users or users who have not saved their own settings yet.
+    // Once a user changes a setting in the settings modal, their choice will be saved
+    // and will override these defaults.
+    const SERVER_OWNER_DEFAULTS = {
+        // Should the plugin be enabled by default for new users?
+        // Options: true (on), false (off)
+        DEFAULT_PLUGIN_ENABLED: true,
 
-    // Default theme for the visualizer.
-    // IMPORTANT: You must use the exact theme name from the 'EQ_THEMES' list below.
-    // Example: 'Sunset', 'Server Themecolor', 'Green', 'Synthwave'
-    DEFAULT_THEME_NAME: 'Server Themecolor',
+        // Default theme for the visualizer.
+        // IMPORTANT: You must use the exact theme name from the 'EQ_THEMES' list below.
+        // Example: 'Sunset', 'Server Themecolor', 'Green', 'Synthwave'
+        DEFAULT_THEME_NAME: 'Server Themecolor',
 
-    // Default visualizer mode.
-    // Options: 'Bars', 'LED', 'Spectrum'
-    DEFAULT_VISUALIZER_MODE: 'Spectrum',
+        // Default visualizer mode.
+        // Options: 'Bars', 'LED', 'Spectrum'
+        DEFAULT_VISUALIZER_MODE: 'Spectrum',
 
-    // Should the peak meter be active by default? (for 'Bars' and 'LED' modes)
-    // Options: true (on), false (off)
-    DEFAULT_SHOW_PEAK_METER: true,
+        // Should the peak meter be active by default? (for 'Bars' and 'LED' modes)
+        // Options: true (on), false (off)
+        DEFAULT_SHOW_PEAK_METER: true,
 
-    // Should the grid and frequency labels be shown by default? (for 'Spectrum' mode)
-    // Options: true (on), false (off)
-    DEFAULT_SHOW_SPECTRUM_GRID: true
-  };
+        // Should the grid and frequency labels be shown by default? (for 'Spectrum' mode)
+        // Options: true (on), false (off)
+        DEFAULT_SHOW_SPECTRUM_GRID: true
+    };
 
 
-  // This section contains all the settings for the plugin. It is divided into two parts:
-  // 1. User-Configurable Settings: Safe to tweak for visual adjustments.
-  // 2. Core Plugin Settings: Advanced settings that affect the plugin's logic.
-  //    Only change these if you know what you are doing.
-  // -----------------------------------------------------------------------------------
+    // This section contains all the settings for the plugin. It is divided into two parts:
+    // 1. User-Configurable Settings: Safe to tweak for visual adjustments.
+    // 2. Core Plugin Settings: Advanced settings that affect the plugin's logic.
+    //    Only change these if you know what you are doing.
+    // -----------------------------------------------------------------------------------
 
-  // -----------------------------------------------------------------------------------
-  // SECTION 1: USER-CONFIGURABLE SETTINGS (Safe to Tweak)
-  // -----------------------------------------------------------------------------------
-  
-  // --- General Layout ---
-  const MOBILE_BREAKPOINT = 769;      // The screen width (in pixels) below which the plugin will deactivate.
-  const SWAP_PTY_AND_TP_ROW = true;   // Set to `true` to place the PTY row at the bottom, `false` for the top.
-  const INACTIVE_RDS_OPACITY = '0.4'; // The opacity of the 'RDS' text when no RDS PS is detected.
+    // -----------------------------------------------------------------------------------
+    // SECTION 1: USER-CONFIGURABLE SETTINGS (Safe to Tweak)
+    // -----------------------------------------------------------------------------------
 
-  // --- Row Scaling and Positioning (NEWLY EXPANDED) ---
-  const PTY_ROW_SCALE = '0.8';         // The size scale of the PTY (Program Type) text row.
-  const TP_ROW_SCALE = '0.6';          // The size scale of the TP/TA/Stereo text row.
+    // --- General Layout ---
+    const MOBILE_BREAKPOINT = 769; // The screen width (in pixels) below which the plugin will deactivate.
+    const INACTIVE_RDS_OPACITY = '0.4'; // The opacity of the 'RDS' text when no RDS PS is detected.
 
-  // Use these to fine-tune the vertical position of the text rows.
-  // Negative values move the row further away from the center, positive values move it closer.
-  const PTY_ROW_TOP_POSITION = '0px';      // Used when PTY is at the top (SWAP_PTY_AND_TP_ROW = false)
-  const PTY_ROW_BOTTOM_POSITION = '0px';   // Used when PTY is at the bottom (SWAP_PTY_AND_TP_ROW = true)
-  const TP_ROW_TOP_POSITION = '-10px';     // Used when TP is at the top (SWAP_PTY_AND_TP_ROW = true)
-  const TP_ROW_BOTTOM_POSITION = '-10px';  // Used when TP is at the bottom (SWAP_PTY_AND_TP_ROW = false)
-
-  // --- Settings Modal ---
-  const MODAL_TOP_POSITION = '50%';   // Vertical position of the settings window.
-  const MODAL_LEFT_POSITION = '50%';  // Horizontal position of the settings window.
-  const SETTINGS_BUTTON_SCALE = '0.6';// The size of the settings gear icon.
-  const MODAL_TEXT_SCALE = '0.7';     // The base text size inside the settings window.
-
-  // --- Visualizer Physics & Appearance ---
-  const SENSITIVITY_DEFAULT = 0.8;    // The default vertical sensitivity of the visualizer.
-  const SENSITIVITY_MIN = 0.5;        // The minimum value for the sensitivity slider.
-  const SENSITIVITY_MAX = 1.5;        // The maximum value for the sensitivity slider.
-
-  const FALL_SPEED = 120;             // How quickly the bars fall (higher value = faster fall).
-  const HORIZONTAL_MARGIN = 5;        // The space (in pixels) on the left and right edges of the visualizer.
-  const BAR_SPACING = 2;              // The space (in pixels) between each bar in 'Bars' and 'LED' mode.
-  const CORNER_RADIUS = 2;            // The corner roundness for 'Bars' mode. Set to 0 for sharp corners.
-
-  // --- Peak Meter ---
-  const PEAK_HOLD_TIME = 500;         // How long the peak line should "hold" at the top (in milliseconds).
-  const PEAK_FALL_SPEED = 50;         // How quickly the peak line falls after holding (lower value = slower).
-  const PEAK_BAR_HEIGHT = 2;          // The thickness (in pixels) of the peak line.
-
-  // --- LED Mode Specific ---
-  const LED_BLOCK_COUNT = 18;         // The number of vertical LED blocks in each bar for 'LED' mode.
-  const LED_BLOCK_SPACING = 2;        // The space (in pixels) between each vertical LED block.
-
-  // --- Color Themes ---
-  // You can easily add your own themes here.
-  // - For a solid color, use one color in the 'colors' array: { name: 'My Color', colors: ['#ff00ff'] }
-  // - For a gradient, use two or more colors: { name: 'My Gradient', colors: ['#ff00ff', '#00ffff'] }
-  const EQ_THEMES = [
-    { name: 'Server Themecolor',  colors: [] }, // Special theme that uses the server's --color-4 variable.
-
-    // Solid Colors
-    { name: 'Red',    colors: ['#ff3b30'] },
-    { name: 'Orange', colors: ['#ff9500'] },
-    { name: 'Yellow', colors: ['#ffcc00'] },
-    { name: 'Green',  colors: ['#34c759'] },
-    { name: 'Mint',   colors: ['#63E6BE'] },
-    { name: 'Teal',   colors: ['#5ac8fa'] },
-    { name: 'Blue',   colors: ['#007aff'] },
-    { name: 'Indigo', colors: ['#5856d6'] },
-    { name: 'Pink',   colors: ['#ff2d55'] },
-    { name: 'White',  colors: ['#ffffff'] },
     
-    // Gradients
-    { name: 'Sunset',   colors: ['#FFD166', '#EF476F', '#8338EC'] },
-    { name: 'Oceanic',  colors: ['#48BFE3', '#5390D9', '#64DFDF'] },
-    { name: 'Synthwave',colors: ['#F72585', '#7209B7', '#3A0CA3'] },
-    { name: 'Forest',   colors: ['#9EF01A', '#38B000', '#004B23'] },
-    { name: 'Inferno',  colors: ['#FEE440', '#F15152', '#D80032'] },
-    { name: 'Galaxy',   colors: ['#1D2D50', '#6C4AB6', '#B931FC'] },
-    { name: 'Rainbow',  colors: ['#d90429', '#ffc300', '#0077b6'] },
-    { name: 'Glacier',  colors: ['#FFFFFF', '#A2D2FF'] },
-    { name: 'Jungle',   colors: ['#55A630', '#F3DE2C'] },
-    { name: 'Lava',     colors: ['#540B0E', '#E07A5F'] }
-  ];
+    
+	// --- Row Scaling and Positioning (Reimplemented & Expanded) ---
+	const TP_ROW_SCALE = '0.6';          // The size scale of the TP/TA row (top).
+	const PS_ROW_SCALE = '0.8';          // The size scale of the PS row (middle).
+	const PTY_ROW_SCALE = '0.8';         // The size scale of the PTY row (bottom).
 
-  // -----------------------------------------------------------------------------------
-  // SECTION 2: CORE PLUGIN SETTINGS (Advanced users only)
-  // -----------------------------------------------------------------------------------
+	// Use these to fine-tune the vertical position.
+	const TP_ROW_VERTICAL_OFFSET = '-15px'; // Adjusts the vertical position of the TP/TA row.
+	const PS_ROW_VERTICAL_OFFSET = '-2px';  // Adjusts the vertical position of the PS row.
+	const PTY_ROW_VERTICAL_OFFSET = '7px'; // Adjusts the vertical position of the PTY row.
 
-  // --- Core Audio Processing ---
-  const MINIMUM_BAR_HEIGHT = 2;       // The minimum visible height of a bar to prevent it from disappearing completely.
-  const NOISE_GATE_THRESHOLD = 1.0;   // Audio values below this will be treated as silence. Helps reduce background noise flicker.
   
-  // --- Visualizer Modes ---
-  // Do not change this array unless you also add a corresponding `drawMode...` function and a `case` in the main `drawEQ` function.
-  const VISUALIZER_MODES = ['Bars', 'LED', 'Spectrum'];
 
-  // --- Analyser Quality ---
-  // These are the specific FFT (Fast Fourier Transform) sizes for the Web Audio API.
-  // Changing these values without understanding the API can break the visualizer.
-  const FFT_SIZES = {
-    Low: 1024,
-    Medium: 4096,
-    High: 8192
-  };
   
-  
-  const PLUGIN_VERSION = 'v1.3.1'; 
-  const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
-  
-  let currentFftSize = FFT_SIZES.Medium;
-  let SENSITIVITY = SENSITIVITY_DEFAULT;
-  let audioContext, analyser, dataArray;
-  let eqCanvas, eqCtx;
-  let showPeakMeter = true;
-  let peakHeights = [];
-  let peakHoldTimers = [];
-  let currentBarHeights = [];
-  let animationFrameId = null;
-  let lastFrameTime = 0;
-  let resizeTimeout;
-  let currentVisualizerMode = 'Bars';
-  let showSpectrumGrid = true;
-  let isEqLayoutActive = false;
-  let originalFlagsContainerRef = null;
-  let settingsButtonRef = null;
-  let currentThemeIndex = 0;
 
-  // References to original, live DOM elements
-  let ptyElementRef = null;
-  let flagsElementRef = null;
-  let visualEqContainerRef = null;
 
-  // ────────────────────────────────────────────────────────────
-  // INITIALISERING
-  // ────────────────────────────────────────────────────────────
-  document.addEventListener("DOMContentLoaded", () => {
-    if (window.innerWidth < MOBILE_BREAKPOINT) return;
-    setTimeout(setupPlugin, 500); 
-    setupResizeListener();
-  });
+    // --- Settings Modal ---
+    const MODAL_TOP_POSITION = '50%'; // Vertical position of the settings window.
+    const MODAL_LEFT_POSITION = '50%'; // Horizontal position of the settings window.
+    const SETTINGS_BUTTON_SCALE = '0.6'; // The size of the settings gear icon.
+    const MODAL_TEXT_SCALE = '0.7'; // The base text size inside the settings window.
 
-  const forceStyle = (el, styles) => {
-    if (!el) return;
-    Object.assign(el.style, styles);
-  };
+    // --- Visualizer Physics & Appearance ---
+    const SENSITIVITY_DEFAULT = 0.8; // The default vertical sensitivity of the visualizer.
+    const SENSITIVITY_MIN = 0.5; // The minimum value for the sensitivity slider.
+    const SENSITIVITY_MAX = 1.5; // The maximum value for the sensitivity slider.
 
-  function setupResizeListener() {
-    window.addEventListener('resize', () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        if (window.innerWidth < MOBILE_BREAKPOINT) window.location.reload();
-      }, 250);
+    const FALL_SPEED = 120; // How quickly the bars fall (higher value = faster fall).
+    const HORIZONTAL_MARGIN = 5; // The space (in pixels) on the left and right edges of the visualizer.
+    const BAR_SPACING = 2; // The space (in pixels) between each bar in 'Bars' and 'LED' mode.
+    const CORNER_RADIUS = 2; // The corner roundness for 'Bars' mode. Set to 0 for sharp corners.
+	
+
+    // --- Peak Meter ---
+    const PEAK_HOLD_TIME = 500; // How long the peak line should "hold" at the top (in milliseconds).
+    const PEAK_FALL_SPEED = 50; // How quickly the peak line falls after holding (lower value = slower).
+    const PEAK_BAR_HEIGHT = 2; // The thickness (in pixels) of the peak line.
+
+    // --- LED Mode Specific ---
+    const LED_BLOCK_COUNT = 18; // The number of vertical LED blocks in each bar for 'LED' mode.
+    const LED_BLOCK_SPACING = 2; // The space (in pixels) between each vertical LED block.
+
+    // --- Color Themes ---
+    // You can easily add your own themes here.
+    // - For a solid color, use one color in the 'colors' array: { name: 'My Color', colors: ['#ff00ff'] }
+    // - For a gradient, use two or more colors: { name: 'My Gradient', colors: ['#ff00ff', '#00ffff'] }
+    const EQ_THEMES = [
+        { name: 'Server Themecolor', colors: [] }, // Special theme that uses the server's --color-4 variable.
+
+        // Solid Colors
+        { name: 'Red', colors: ['#ff3b30'] },
+        { name: 'Orange', colors: ['#ff9500'] },
+        { name: 'Yellow', colors: ['#ffcc00'] },
+        { name: 'Green', colors: ['#34c759'] },
+        { name: 'Mint', colors: ['#63E6BE'] },
+        { name: 'Teal', colors: ['#5ac8fa'] },
+        { name: 'Blue', colors: ['#007aff'] },
+        { name: 'Indigo', colors: ['#5856d6'] },
+        { name: 'Pink', colors: ['#ff2d55'] },
+        { name: 'White', colors: ['#ffffff'] },
+
+        // Gradients
+        { name: 'Sunset', colors: ['#FFD166', '#EF476F', '#8338EC'] },
+        { name: 'Oceanic', colors: ['#48BFE3', '#5390D9', '#64DFDF'] },
+        { name: 'Synthwave', colors: ['#F72585', '#7209B7', '#3A0CA3'] },
+        { name: 'Forest', colors: ['#9EF01A', '#38B000', '#004B23'] },
+        { name: 'Inferno', colors: ['#FEE440', '#F15152', '#D80032'] },
+        { name: 'Galaxy', colors: ['#1D2D50', '#6C4AB6', '#B931FC'] },
+        { name: 'Rainbow', colors: ['#d90429', '#ffc300', '#0077b6'] },
+        { name: 'Glacier', colors: ['#FFFFFF', '#A2D2FF'] },
+        { name: 'Jungle', colors: ['#55A630', '#F3DE2C'] },
+        { name: 'Lava', colors: ['#540B0E', '#E07A5F'] }
+    ];
+
+    // -----------------------------------------------------------------------------------
+    // SECTION 2: CORE PLUGIN SETTINGS (Advanced users only)
+    // -----------------------------------------------------------------------------------
+
+    // --- Core Audio Processing ---
+    const MINIMUM_BAR_HEIGHT = 2; // The minimum visible height of a bar to prevent it from disappearing completely.
+    const NOISE_GATE_THRESHOLD = 1.0; // Audio values below this will be treated as silence. Helps reduce background noise flicker.
+
+    // --- Visualizer Modes ---
+    // Do not change this array unless you also add a corresponding `drawMode...` function and a `case` in the main `drawEQ` function.
+    const VISUALIZER_MODES = ['Bars', 'LED', 'Spectrum'];
+
+    // --- Analyser Quality ---
+    // These are the specific FFT (Fast Fourier Transform) sizes for the Web Audio API.
+    // Changing these values without understanding the API can break the visualizer.
+    const FFT_SIZES = {
+        Low: 1024,
+        Medium: 4096,
+        High: 8192
+    };
+
+
+    const PLUGIN_VERSION = 'v1.4';
+    const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
+
+    let currentFftSize = FFT_SIZES.Medium;
+    let SENSITIVITY = SENSITIVITY_DEFAULT;
+    let audioContext, analyser, dataArray;
+    let eqCanvas, eqCtx;
+    let showPeakMeter = true;
+    let peakHeights = [];
+    let peakHoldTimers = [];
+    let currentBarHeights = [];
+    let animationFrameId = null;
+    let lastFrameTime = 0;
+    let resizeTimeout;
+    let currentVisualizerMode = 'Bars';
+    let showSpectrumGrid = true;
+    let isEqLayoutActive = false;
+    let originalFlagsContainerRef = null;
+    let settingsButtonRef = null;
+    let currentThemeIndex = 0;
+
+    // References to original, live DOM elements
+    let ptyElementRef = null;
+    let flagsElementRef = null;
+    let visualEqContainerRef = null;
+
+    // ────────────────────────────────────────────────────────────
+    // INITIALISERING
+    // ────────────────────────────────────────────────────────────
+    document.addEventListener("DOMContentLoaded", () => {
+        if (window.innerWidth < MOBILE_BREAKPOINT) return;
+        setTimeout(setupPlugin, 500);
+        setupResizeListener();
     });
-  }
 
-  // ────────────────────────────────────────────────────────────
-  // HOVEDOPPSETT
-  // ────────────────────────────────────────────────────────────
+    const forceStyle = (el, styles) => {
+        if (!el) return;
+        Object.assign(el.style, styles);
+    };
+
+    function setupResizeListener() {
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if (window.innerWidth < MOBILE_BREAKPOINT) window.location.reload();
+            }, 250);
+        });
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // HOVEDOPPSETT
+    // ────────────────────────────────────────────────────────────
 function setupPlugin() {
     addVisualEQToggle();
 
     const storedState = localStorage.getItem('visualeqEnabled');
-    const isEnabled = storedState === null
-        ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED
-        : (storedState !== 'false');
+    const isEnabled = storedState === null ?
+        SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED :
+        (storedState !== 'false');
 
     if (!isEnabled) {
         console.log("VisualEQ is disabled via side menu setting.");
-        return; 
+        return;
     }
 
-
-    // --- START: MODIFIED SETTINGS LOADING ---
-
-    // Find the index of the default theme name. Fall back to 0 if not found.
     let defaultThemeIndex = EQ_THEMES.findIndex(theme => theme.name === SERVER_OWNER_DEFAULTS.DEFAULT_THEME_NAME);
-    if (defaultThemeIndex === -1) {
-        console.warn(`VisualEQ: Default theme name "${SERVER_OWNER_DEFAULTS.DEFAULT_THEME_NAME}" not found. Falling back to the first theme.`);
-        defaultThemeIndex = 0;
-    }
-
-    // Load theme from localStorage, or use the server-defined default.
+    if (defaultThemeIndex === -1) defaultThemeIndex = 0;
     currentThemeIndex = parseInt(localStorage.getItem('visualeqThemeIndex') || defaultThemeIndex.toString(), 10);
-
-    // Load mode from localStorage, or use the server-defined default.
     currentVisualizerMode = localStorage.getItem('visualeqMode') || SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
-
-    // Load Peak Meter setting. If it's not set ('null'), use the server default. Otherwise, use the stored value.
     const storedPeak = localStorage.getItem('visualeqShowPeak');
     showPeakMeter = storedPeak === null ? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER : (storedPeak === 'true');
-
-    // Load Grid setting. If it's not set ('null'), use the server default. Otherwise, use the stored value.
     const storedGrid = localStorage.getItem('visualeqShowGrid');
     showSpectrumGrid = storedGrid === null ? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID : (storedGrid !== 'false');
-
-    // --- END: MODIFIED SETTINGS LOADING ---
-
     let loadedFftSize = parseInt(localStorage.getItem('visualeqFftSize'));
-    if (isNaN(loadedFftSize)) { currentFftSize = FFT_SIZES.Medium; } 
-    else {
+    if (isNaN(loadedFftSize)) { currentFftSize = FFT_SIZES.Medium; } else {
         if (loadedFftSize === 2048) {
             currentFftSize = 4096;
             localStorage.setItem('visualeqFftSize', currentFftSize);
         } else { currentFftSize = loadedFftSize; }
     }
-
+    
     settingsButtonRef = createSettingsButton();
     createSettingsModal();
 
-    setupVisualEQLayout();
+    const waitForLogoAndInit = () => {
+        const timeout = setTimeout(() => {
+            console.warn('VisualEQ: Timeout waiting for logo plugin. Running layout anyway.');
+            observer.disconnect();
+            setupVisualEQLayout();
+        }, 3000);
+
+        const observer = new MutationObserver((mutations, obs) => {
+            const logoElement = document.getElementById('logo-container-desktop');
+            if (logoElement) {
+                console.log('VisualEQ: Logo detected. Building final layout.');
+                clearTimeout(timeout);
+                obs.disconnect();
+                setTimeout(setupVisualEQLayout, 50); 
+            }
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+    };
+
+    waitForLogoAndInit();
 }
 
 function addVisualEQToggle() {
     const anchorElement = document.getElementById("imperial-units");
 
     if (!anchorElement) {
-        console.warn("VisualEQ: Could not find the 'imperial-units' anchor element. Cannot add the Enable/Disable switch to the side menu.");
+        console.warn("VisualEQ: Could not find the 'imperial-units' anchor element.");
         return;
     }
 
     const id = "visualeq-enable-toggle";
-    const label = "Enable VisualEQ";
+    const label = "Hide VisualEQ";
 
     const wrapper = document.createElement("div");
     wrapper.className = "form-group";
     wrapper.innerHTML = `
-        <div class="switch flex-container flex-phone flex-phone-column flex-phone-center">
-            <input type="checkbox" tabindex="0" id="${id}" aria-label="${label}" />
-            <label for="${id}"></label>
-            <span class="text-smaller text-uppercase text-bold color-4 p-10">${label.toUpperCase()}</span>
-        </div>
+    <div class="switch flex-container flex-phone flex-phone-column flex-phone-center">
+        <input type="checkbox" tabindex="0" id="${id}" aria-label="${label}" />
+        <label for="${id}"></label>
+        <span class="text-smaller text-uppercase text-bold color-4 p-10">${label.toUpperCase()}</span>
+    </div>
     `;
 
     anchorElement.closest('.form-group').insertAdjacentElement("afterend", wrapper);
 
     const storedState = localStorage.getItem('visualeqEnabled');
-    const isEnabled = storedState === null
-        ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED
-        : (storedState !== 'false');
-	if (storedState === null) {
-        localStorage.setItem('visualeqEnabled', isEnabled);
-    }
-    document.getElementById(id).checked = isEnabled;
+    const isEnabled = storedState === null ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED : (storedState !== 'false');
+
+    document.getElementById(id).checked = !isEnabled;
 
     document.getElementById(id).addEventListener("change", function () {
-        localStorage.setItem("visualeqEnabled", this.checked);
+		
+        const shouldBeEnabled = !this.checked;
+        localStorage.setItem("visualeqEnabled", shouldBeEnabled);
         window.location.reload();
     });
 }
@@ -293,105 +300,159 @@ function addVisualEQToggle() {
 function setupVisualEQLayout() {
     if (isEqLayoutActive) return;
 
-    const psContainer = document.getElementById("ps-container");
-    const flagsContainer = document.getElementById("flags-container-desktop");
-    if (!psContainer || !flagsContainer) return;
+    const psContainer = document.getElementById('ps-container');
+    const flagsContainer = document.getElementById('flags-container-desktop');
+    const playButtonBlock = document.querySelector('.playbutton')?.closest('div[class*="panel-10"]');
+    const logoBlock = document.getElementById('logo-container-desktop')?.closest('.panel-30');
+    const mainParentContainer = flagsContainer.parentNode;
 
-    ptyElementRef = flagsContainer.querySelector(".data-pty")?.parentElement;
-    flagsElementRef = flagsContainer.querySelector("h3");
-
-    if (ptyElementRef) psContainer.append(ptyElementRef);
-    if (flagsElementRef) psContainer.append(flagsElementRef);
-
-    flagsContainer.style.display = 'none';
-
-    const visualEqContainer = document.createElement('div');
-    visualEqContainer.className = flagsContainer.className; 
-    visualEqContainerRef = visualEqContainer;
-
-    flagsContainer.after(visualEqContainer);
-    
-    forceStyle(psContainer, { position: "relative" });
-    const ptyElToStyle = psContainer.querySelector(".data-pty");
-    const flagsElToStyle = psContainer.querySelector("h3");
-
-    // --- START: MODIFIED STYLING LOGIC ---
-    if (ptyElToStyle && flagsElToStyle) {
-      const ptyStyles = SWAP_PTY_AND_TP_ROW
-        ? { bottom: PTY_ROW_BOTTOM_POSITION, transformOrigin: 'bottom center' }
-        : { top: PTY_ROW_TOP_POSITION, transformOrigin: 'top center' };
-
-      const flagsStyles = SWAP_PTY_AND_TP_ROW
-        ? { top: TP_ROW_TOP_POSITION, transformOrigin: 'top center' }
-        : { bottom: TP_ROW_BOTTOM_POSITION, transformOrigin: 'bottom center' };
-
-      Object.assign(ptyElToStyle.style, {
-        position: "absolute", left: "0", right: "0", margin: "0", textAlign: "center",
-        transform: `scale(${PTY_ROW_SCALE})`,
-        ...ptyStyles
-      });
-
-      Object.assign(flagsElToStyle.style, {
-        position: "absolute", left: "0", right: "0", margin: "0", textAlign: "center",
-        transform: `scale(${TP_ROW_SCALE})`,
-        ...flagsStyles
-      });
-      
-      if (flagsElToStyle.querySelector(".stereo-container")) forceStyle(flagsElToStyle.querySelector(".stereo-container"), { position: "relative", top: "17px" });
+    if (!psContainer || !flagsContainer || !playButtonBlock || !mainParentContainer) {
+        console.error('VisualEQ: Kunne ikke finne et eller flere kjerneelementer for ombygging.');
+        return;
     }
-    // --- END: MODIFIED STYLING LOGIC ---
 
-    forceStyle(visualEqContainer, { height: `${psContainer.offsetHeight}px`, padding: '0', overflow: 'hidden', position: 'relative' });
+    const originalPsTextElement = document.getElementById('data-ps');
+    const psTextElement = originalPsTextElement.cloneNode(true);
+    psTextElement.id = 'data-ps-desktop-clone';
+
+    const ptyElement = flagsContainer.querySelector('h2');
+    const flagsRowElement = flagsContainer.querySelector('h3');
+
+    if (psTextElement && ptyElement && flagsRowElement) {
+        const originalTooltipText = psContainer.getAttribute('data-tooltip');
+        flagsContainer.innerHTML = '';
+        
+        const psWrapper = document.createElement('div');
+        psWrapper.style.position = 'relative';
+        psWrapper.appendChild(psTextElement);
+
+        if (originalTooltipText) {
+            const tooltipOverlay = document.createElement('span');
+            tooltipOverlay.className = 'overlay tooltip';
+            tooltipOverlay.setAttribute('data-tooltip', originalTooltipText);
+            psWrapper.appendChild(tooltipOverlay);
+
+            psWrapper.style.cursor = 'pointer';
+            psWrapper.addEventListener('click', () => {
+                document.getElementById('ps-container')?.click();
+            });
+        }
+
+        flagsContainer.appendChild(flagsRowElement);
+        flagsContainer.appendChild(psWrapper);
+        flagsContainer.appendChild(ptyElement);
+        
+        flagsContainer.style.position = 'relative';
+        forceStyle(flagsRowElement, {
+            position: 'absolute', top: 0, left: 0, right: 0, textAlign: 'center',
+            transform: `scale(${TP_ROW_SCALE}) translateY(${TP_ROW_VERTICAL_OFFSET})`
+        });
+        forceStyle(psWrapper, {
+            position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center',
+            transform: `translateY(-50%) scale(${PS_ROW_SCALE}) translateY(${PS_ROW_VERTICAL_OFFSET})`
+        });
+        forceStyle(ptyElement, {
+            position: 'absolute', bottom: 0, left: 0, right: 0, textAlign: 'center',
+            transform: `scale(${PTY_ROW_SCALE}) translateY(${PTY_ROW_VERTICAL_OFFSET})`,
+            display: 'block'
+        });
+
+        new MutationObserver(() => {
+            const hasPsText = originalPsTextElement.textContent.trim().length > 0;
+            psTextElement.textContent = originalPsTextElement.textContent;
+            psTextElement.style.visibility = hasPsText ? 'visible' : 'hidden';
+            if (psTextElement.style.minHeight === '') psTextElement.style.minHeight = '20px';
+        }).observe(originalPsTextElement, { childList: true, characterData: true, subtree: true });
+    }
+    
+    const newPanelRow = document.createElement('div');
+    newPanelRow.className = 'flex-container';
+    newPanelRow.style.setProperty('align-items', 'flex-end', 'important');
+    newPanelRow.style.width = '100%';
+
+    visualEqContainerRef = document.createElement('div');
+    visualEqContainerRef.className = 'panel-eq-container flex-center'; 
+    
     eqCanvas = document.createElement('canvas');
     eqCtx = eqCanvas.getContext('2d');
-    eqCanvas.width = visualEqContainer.offsetWidth;
-    eqCanvas.height = visualEqContainer.offsetHeight;
-    visualEqContainer.appendChild(eqCanvas);
-    visualEqContainer.append(settingsButtonRef);
+    visualEqContainerRef.appendChild(eqCanvas);
+    visualEqContainerRef.appendChild(settingsButtonRef);
     forceStyle(settingsButtonRef, { opacity: '0' });
-    visualEqContainer.onmouseover = () => forceStyle(settingsButtonRef, { opacity: '1' });
-    visualEqContainer.onmouseout = () => forceStyle(settingsButtonRef, { opacity: '0' });
-    const rdsIndicator = document.createElement('span');
-    rdsIndicator.textContent = 'RDS';
-    rdsIndicator.className = 'data-tp';
-    forceStyle(rdsIndicator, { display: 'inline', margin: '0 15px', opacity: INACTIVE_RDS_OPACITY });
-    flagsElToStyle?.querySelector('.data-ms')?.after(rdsIndicator);
-    const psTextElement = document.getElementById('data-ps');
-    if (psTextElement) {
-        new MutationObserver(() => {
-            forceStyle(rdsIndicator, { opacity: psTextElement.textContent.trim() ? '1' : INACTIVE_RDS_OPACITY });
-        }).observe(psTextElement, { childList: true, characterData: true, subtree: true });
+    visualEqContainerRef.onmouseover = () => forceStyle(settingsButtonRef, { opacity: '1' });
+    visualEqContainerRef.onmouseout = () => forceStyle(settingsButtonRef, { opacity: '0' });
+
+    newPanelRow.appendChild(playButtonBlock);
+    newPanelRow.appendChild(flagsContainer);
+    if (logoBlock) {
+        newPanelRow.appendChild(logoBlock);
+    }
+    newPanelRow.appendChild(visualEqContainerRef);
+
+    mainParentContainer.innerHTML = ''; 
+    mainParentContainer.appendChild(newPanelRow);
+    
+    psContainer.style.display = 'none';
+    document.body.appendChild(psContainer);
+
+    const targetHeight = '90px';
+    
+    forceStyle(playButtonBlock, { height: targetHeight, flex: '0 0 auto' });
+    playButtonBlock.style.setProperty('margin-left', '10px', 'important');
+    playButtonBlock.style.setProperty('margin-right', '10px', 'important');
+
+    forceStyle(flagsContainer, { height: targetHeight, flex: '1 1 auto' });
+    flagsContainer.style.setProperty('margin-right', '20px', 'important');
+
+    if (logoBlock) {
+        forceStyle(logoBlock, { height: targetHeight, flex: '0 0 5%' });
+        logoBlock.style.setProperty('margin-right', '10px', 'important');
     }
 
+    forceStyle(visualEqContainerRef, {
+        height: targetHeight,
+        flex: '0 0 31.4%',
+        overflow: 'hidden'
+    });
+    visualEqContainerRef.style.setProperty('margin-right', '10px', 'important');
+    
+    setTimeout(() => {
+        if (eqCanvas && visualEqContainerRef) {
+            eqCanvas.width = visualEqContainerRef.offsetWidth;
+            eqCanvas.height = visualEqContainerRef.offsetHeight;
+        }
+    }, 150);
+
     isEqLayoutActive = true;
-    // NOTE: The call to startOrRestartEQ() was removed from here to prevent a race condition.
-    // The watchdog setInterval will safely start the visualizer when the audio stream is ready.
+
+    if (typeof initTooltips === 'function') {
+        initTooltips();
+    }
 }
 
-  // ────────────────────────────────────────────────────────────
-  // UI-ELEMENTER
-  // ────────────────────────────────────────────────────────────
-  function createSettingsButton() {
-    let borderColor = getComputedStyle(document.documentElement).getPropertyValue('--container-border-color').trim() || 'white';
-    const settingsButton = document.createElement('button');
-    settingsButton.id = 'fmdx-settings-btn';
-    settingsButton.innerHTML = '⚙️';
-    forceStyle(settingsButton, {
-        position: 'absolute', top: '5px', right: '5px', zIndex: '10',
-        background: 'rgba(0,0,0,0.5)', border: `1px solid ${borderColor}`,
-        color: 'white', borderRadius: '50%', cursor: 'pointer',
-        width: '24px', height: '24px', fontSize: '16px', lineHeight: '22px',
-        padding: '0', textAlign: 'center', opacity: '0', 
-        transform: `scale(${SETTINGS_BUTTON_SCALE})`,
-        transition: 'opacity 0.2s, transform 0.2s ease-in-out'
-    });
+    // ────────────────────────────────────────────────────────────
+    // UI-ELEMENTER
+    // ────────────────────────────────────────────────────────────
+    function createSettingsButton() {
+        let borderColor = getComputedStyle(document.documentElement).getPropertyValue('--container-border-color').trim() || 'white';
+        const settingsButton = document.createElement('button');
+        settingsButton.id = 'fmdx-settings-btn';
+        settingsButton.innerHTML = '⚙️';
+        forceStyle(settingsButton, {
+            position: 'absolute', top: '5px', right: '5px', zIndex: '10',
+            background: 'rgba(0,0,0,0.5)', border: `1px solid ${borderColor}`,
+            color: 'white', borderRadius: '50%', cursor: 'pointer',
+            width: '24px', height: '24px', fontSize: '16px', lineHeight: '22px',
+            padding: '0', textAlign: 'center', opacity: '0',
+            transform: `scale(${SETTINGS_BUTTON_SCALE})`,
+            transition: 'opacity 0.2s, transform 0.2s ease-in-out'
+        });
 
-    settingsButton.onclick = () => {
-        document.getElementById('fmdx-settings-modal-overlay').style.display = 'block';
-        checkForUpdates();
-    };
-    return settingsButton;
-  }
+        settingsButton.onclick = () => {
+            document.getElementById('fmdx-settings-modal-overlay').style.display = 'block';
+            checkForUpdates();
+        };
+        return settingsButton;
+    }
 
 function teardownVisualEQLayout() {
     if (!isEqLayoutActive) return;
@@ -400,34 +461,55 @@ function teardownVisualEQLayout() {
     animationFrameId = null;
     analyser = null;
 
-    const originalContainer = document.getElementById("flags-container-desktop");
+    const originalPsContainer = document.getElementById('ps-container');
+    const flagsContainer = originalFlagsContainerRef;
     const ptyEl = ptyElementRef;
     const flagsEl = flagsElementRef;
     const ourContainer = visualEqContainerRef;
+    const playButtonBlock = document.querySelector('.playbutton').closest('div[style*="width: 86.5px"]');
 
-    if (!originalContainer || !ptyEl || !flagsEl || !ourContainer) return;
+    if (!originalPsContainer || !flagsContainer || !ptyEl || !flagsEl || !ourContainer || !playButtonBlock) {
+        console.error("Teardown: Kunne ikke finne alle nødvendige elementer for å gjenopprette layout.");
+        return;
+    }
 
-    ptyEl.removeAttribute('style');
+    originalPsContainer.removeAttribute('style'); 
+    const psTextElement = document.getElementById('data-ps');
+    if(psTextElement) {
+        originalPsContainer.appendChild(psTextElement);
+        psTextElement.removeAttribute('data-tooltip');
+        psTextElement.classList.remove('tooltip');
+        psTextElement.style.cursor = '';
+    }
+
+    flagsContainer.innerHTML = '';
     flagsEl.removeAttribute('style');
-    const stereoEl = flagsEl.querySelector(".stereo-container");
-    if (stereoEl) stereoEl.removeAttribute('style');
-    flagsEl.querySelector('.data-tp[style*="display: inline"]')?.remove();
+    ptyEl.removeAttribute('style');
+    flagsContainer.appendChild(ptyEl);
+    flagsContainer.appendChild(flagsEl);
+    flagsContainer.removeAttribute('style');
 
 
-    originalContainer.append(ptyEl);
-    originalContainer.append(flagsEl);
+    const psBlock = document.createElement('div');
+    psBlock.className = 'panel-75';
+    psBlock.appendChild(playButtonBlock);
+    psBlock.appendChild(flagsContainer);
+    psBlock.appendChild(originalPsContainer);
 
-    ourContainer.remove();
-
-    originalContainer.style.display = '';
+    const parent = ourContainer.parentNode;
+    parent.insertBefore(psBlock, ourContainer);
+    parent.removeChild(ourContainer); 
+    parent.removeAttribute('style');
 
     ptyElementRef = null;
     flagsElementRef = null;
     visualEqContainerRef = null;
+    originalFlagsContainerRef = null;
     isEqLayoutActive = false;
+    console.log("VisualEQ: Layout deaktivert og original struktur gjenopprettet.");
 }
 
-function createSettingsModal() {
+    function createSettingsModal() {
     if (document.getElementById('fmdx-settings-modal-overlay')) return;
 
     const modalStyles = document.createElement('style');
@@ -437,10 +519,10 @@ function createSettingsModal() {
       #visualeq-sensitivity-slider::-moz-range-thumb { width: 18px; height: 18px; background: var(--color-4, #E6C269); border-radius: 50%; cursor: pointer; border: 2px solid var(--color-1, #111); transition: transform 0.2s ease; }
       #visualeq-sensitivity-slider:hover::-webkit-slider-thumb { transform: scale(1.1); }
       #visualeq-sensitivity-slider:hover::-moz-range-thumb { transform: scale(1.1); }
-      .visualeq-modal-content { background: var(--color-0, #121010); color: var(--color-3, #FFF); border: 1px solid var(--color-2, #333); }
-      .visualeq-modal-content .header { background: var(--color-1, #2A2A2A); padding: 10px 15px; border-bottom: 1px solid var(--color-2, #333); }
-      .visualeq-modal-content h2 { color: var(--color-3, #FFF); font-size: 1.5em; margin: 0; }
-      .visualeq-modal-content .header a { color: var(--color-3, #FFF); opacity: 0.6; }
+      .visualeq-modal-content { background: var(--color-1, #121010); color: var(--color-3, #FFF); border: 1px solid var(--color-2, #333); }
+      .visualeq-modal-content .header { background: var(--color-2, #2A2A2A); padding: 10px 15px; border-bottom: 1px solid var(--color-2, #333); }
+      .visualeq-modal-content h2 { color: var(--color-4, #FFF); font-size: 1.5em; margin: 0; }
+      .visualeq-modal-content .header a { color: var(--color-4, #FFF); opacity: 0.6; }
       .visualeq-modal-content select { width: 100%; padding: 0.8em; background: var(--color-2, #333); color: var(--color-3, #FFF); border: 1px solid var(--color-1, #444); border-radius: 4px; font-size: 1em; }
       .visualeq-modal-content label { display: block; margin-bottom: 0.6em; font-weight: bold; color: var(--color-4, #E6C269); text-transform: uppercase; font-size: 0.9em; }
       .visualeq-modal-content .help-section hr { border: none; border-top: 1px solid var(--color-2, #444); opacity: 0.8; margin: 2em 0; }
@@ -553,24 +635,24 @@ function createSettingsModal() {
     handleModeChange(currentVisualizerMode); 
 
 
-qualitySelect.onchange = () => {
-    const newFftSize = parseInt(qualitySelect.value, 10);
-    localStorage.setItem('visualeqFftSize', newFftSize);
-    currentFftSize = newFftSize;
+	qualitySelect.onchange = () => {
+		const newFftSize = parseInt(qualitySelect.value, 10);
+		localStorage.setItem('visualeqFftSize', newFftSize);
+		currentFftSize = newFftSize;
 
-    startOrRestartEQ();
-};
+		startOrRestartEQ();
+	};
 
     const helpSection = document.createElement('div');
     helpSection.className = 'help-section';
     helpSection.innerHTML = `
         <hr>
-        <h4 style="margin: 0 0 0.8em 0; font-size: 1.2em; color: var(--color-3);">Tips</h4>
+        <h4 style="margin: 0 0 0.8em 0; font-size: 1.2em; color: var(--color-4);">Tips</h4>
         <p style="margin: 0.8em 0; font-size: 1em;"><strong>Visualizer Mode:</strong> Changes the visual style of the analyzer (Bars, LED, Spectrum).</p>
         <p style="margin: 0.8em 0; font-size: 1em;"><strong>Theme:</strong> Changes the color scheme of the audio visualizer.</p>
         <p style="margin: 0.8em 0; font-size: 1em;"><strong>Peak Meter:</strong> Displays a line indicating the highest recent audio level for each band (Bars & LED mode).</p>
         <p style="margin: 0.8em 0; font-size: 1em;"><strong>Sensitivity:</strong> Controls the vertical amplification of the visualizer.</p>
-        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Analyser Quality:</strong> Higher values provide more detail but may use more CPU. 'OFF' disables the visualizer.</p>
+        <p style="margin: 0.8em 0; font-size: 1em;"><strong>Analyser Quality:</strong> Higher values provide more detail but may use more CPU.</p>
     `;
 
     const createControlSection = (label, controlElement, marginTop = '0') => {
@@ -707,8 +789,8 @@ function startOrRestartEQ() {
     animationFrameId = requestAnimationFrame(drawEQ);
 }
 
-const bandRanges_20_bands_definition = [ { start: 1, end: 1 }, { start: 2, end: 3 }, { start: 4, end: 5 }, { start: 6, end: 8 }, { start: 9, end: 12 }, { start: 13, end: 17 }, { start: 18, end: 24 }, { start: 25, end: 33 }, { start: 34, end: 45 }, { start: 46, end: 62 }, { start: 63, end: 84 }, { start: 85, end: 112 }, { start: 113, end: 148 }, { start: 149, end: 195 }, { start: 196, end: 256 }, { start: 257, end: 330 }, { start: 331, end: 420 }, { start: 421, end: 530 }, { start: 531, end: 660 }, { start: 661, end: 800 } ];
-	
+const bandRanges_20_bands_definition = [ { start: 5, end: 5 }, { start: 6, end: 8 }, { start: 9, end: 12 }, { start: 13, end: 17 }, { start: 18, end: 24 }, { start: 25, end: 33 }, { start: 34, end: 45 }, { start: 46, end: 62 }, { start: 63, end: 84 }, { start: 85, end: 112 }, { start: 113, end: 148 }, { start: 149, end: 195 }, { start: 196, end: 248 }, { start: 249, end: 295 }, { start: 296, end: 356 }, { start: 357, end: 402 }, { start: 402, end: 458 }, { start: 459, end: 530 }, { start: 531, end: 580 }, { start: 581, end: 650 } ];
+
 function calculateBandLevels(numBands) {
   if (!dataArray || !audioContext) return new Array(numBands).fill(0);
 
@@ -773,10 +855,10 @@ function drawEQ(currentTime) {
   let bandLevels;
   if (analyser && audioContext && audioContext.state === 'running') {
       analyser.getByteFrequencyData(dataArray);
-      const numBands = currentVisualizerMode === 'Spectrum' ? 40 : 20;
+      const numBands = currentVisualizerMode === 'Spectrum' ? 60 : 20;
       bandLevels = calculateBandLevels(numBands);
   } else {
-      const numBands = currentVisualizerMode === 'Spectrum' ? 40 : 20;
+      const numBands = currentVisualizerMode === 'Spectrum' ? 60 : 20;
       bandLevels = new Array(numBands).fill(0);
   }
   
@@ -939,7 +1021,7 @@ function drawSpectrumGrid(bandLevels) {
         eqCtx.stroke();
     }
 
-    const bandsPerZone = 4;
+    const bandsPerZone = 6;
     for (let i = bandsPerZone; i < bandLevels.length; i += bandsPerZone) {
         const x = HORIZONTAL_MARGIN + i * spacing;
         eqCtx.beginPath();
@@ -1050,4 +1132,3 @@ setInterval(() => {
     }
 }, 1000);
 })();
-
