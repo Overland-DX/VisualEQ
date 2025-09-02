@@ -6,7 +6,7 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.5 :: CONFIGURATION
+    // VisualEQ v1.5.1 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
@@ -97,9 +97,8 @@
 	const LED_BLOCK_SPACING = 2;   // The space (in pixels) between each vertical LED block. Default: 2
 
 	// --- Waveform Mode Specific ---
-	const WAVEFORM_SENSITIVITY = 0.8; // Vertical "zoom" for the waveform. Try values between 0.5 and 2.5. Default: 0.8
-	const WAVEFORM_GLOW_SIZE = 2;     // Size of the "neon glow" effect. Set to 0 to disable. Default: 2
-	const WAVEFORM_SMOOTHING = -0.2;  // Controls the "lag" or smoothness. Try values between 0.0 (very smooth) and 0.9 (very responsive). Default: -0.2
+	const WAVEFORM_GLOW_SIZE = 5;     // Size of the "neon glow" effect. Set to 0 to disable. Default: 5
+	const WAVEFORM_DURATION = 5;      // NY: How many seconds of audio history to show. Default: 5
 
 	// --- Circle Mode Specific (3-Panel Layout) ---
 	const CIRCLE_PANEL_RADIUS = 5;      // The inner radius of each of the three circles. Default: 35
@@ -164,7 +163,7 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.5';
+    const PLUGIN_VERSION = 'v1.5.1';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
@@ -188,6 +187,8 @@
     let ptyElementRef = null;
     let flagsElementRef = null;
     let visualEqContainerRef = null;
+	let lastWaveformY = null;
+	let waveformHistory = [];
 
     // ────────────────────────────────────────────────────────────
     // INITIALISERING
@@ -677,10 +678,6 @@ function createSettingsModal() {
         localStorage.setItem('visualeqShowPeak', showPeakMeter);
     };
 
-    const sensitivitySlider = document.createElement('input');
-    sensitivitySlider.id = 'visualeq-sensitivity-slider';
-    Object.assign(sensitivitySlider, { type: 'range', min: SENSITIVITY_MIN, max: SENSITIVITY_MAX, step: 0.1, value: SENSITIVITY });
-
     const gridToggleContainer = document.createElement('div');
     gridToggleContainer.className = 'visualeq-checkbox-container';
     gridToggleContainer.innerHTML = `
@@ -715,6 +712,24 @@ function createSettingsModal() {
 		startOrRestartEQ();
 	};
 
+    const sensitivitySlider = document.createElement('input');
+    sensitivitySlider.id = 'visualeq-sensitivity-slider';
+    Object.assign(sensitivitySlider, { type: 'range', min: SENSITIVITY_MIN, max: SENSITIVITY_MAX, step: 0.1, value: SENSITIVITY });
+
+    const sensLabelEl = document.createElement('label');
+    sensLabelEl.htmlFor = 'sensitivity';
+    sensLabelEl.innerHTML = `Sensitivity <span>(${SENSITIVITY.toFixed(1)})</span>`;
+    
+    sensitivitySlider.oninput = () => {
+        SENSITIVITY = parseFloat(sensitivitySlider.value);
+        sensLabelEl.querySelector('span').textContent = `(${SENSITIVITY.toFixed(1)})`;
+        localStorage.setItem('visualeqSensitivity', SENSITIVITY);
+    };
+    
+    const sensitivityContainer = document.createElement('div');
+    forceStyle(sensitivityContainer, { marginTop: '1.5em' });
+    sensitivityContainer.append(sensLabelEl, sensitivitySlider);
+
     const helpSection = document.createElement('div');
     helpSection.className = 'help-section';
     helpSection.innerHTML = `
@@ -736,26 +751,13 @@ function createSettingsModal() {
         return container;
     };
     
-    const sensLabelEl = document.createElement('label');
-    sensLabelEl.htmlFor = 'sensitivity';
-    sensLabelEl.innerHTML = `Sensitivity <span>(${SENSITIVITY.toFixed(1)})</span>`;
-    sensitivitySlider.oninput = () => {
-        SENSITIVITY = parseFloat(sensitivitySlider.value);
-        sensLabelEl.querySelector('span').textContent = `(${SENSITIVITY.toFixed(1)})`;
-        localStorage.setItem('visualeqSensitivity', SENSITIVITY);
-    };
-    
-    const sensitivityContainer = document.createElement('div');
-    forceStyle(sensitivityContainer, { marginTop: '1.5em' });
-    sensitivityContainer.append(sensLabelEl, sensitivitySlider);
-
     scrollableArea.append(
         createControlSection('Theme', themeSelect),
         createControlSection('Visualizer Mode', modeSelect, '1.5em'),
         gridToggleContainer, 
         createControlSection('Analyser Quality', qualitySelect, '1.5em'),
         peakMeterContainer,
-        sensitivityContainer,
+        sensitivityContainer, 
         helpSection
     );
     
@@ -779,7 +781,6 @@ function createSettingsModal() {
     if (versionInfoElement) {
         versionInfoElement.addEventListener('mouseover', () => {
             tooltipTextElement.textContent = 'View VisualEQ on GitHub';
-
             const pRect = versionInfoElement.getBoundingClientRect();
             const tipRect = tooltipTextElement.getBoundingClientRect();
             let top = pRect.top - tipRect.height - 10;
@@ -789,7 +790,6 @@ function createSettingsModal() {
             tooltipTextElement.style.left = `${left}px`;
             tooltipTextElement.style.opacity = '1';
         });
-
         versionInfoElement.addEventListener('mouseout', () => {
             tooltipTextElement.style.opacity = '0';
         });
@@ -999,7 +999,7 @@ function drawEQ(currentTime) {
             drawModeSpectrum(bandLevels);
             break;
         case 'Waveform':
-            drawModeWaveform(bandLevels);
+            drawModeWaveform(deltaTime);
             break;
         case 'Circle':
             drawModeCircle(bandLevels, deltaTime);
@@ -1237,23 +1237,43 @@ function drawModeSpectrum(bandLevels) {
   eqCtx.stroke();
 }
 
-function drawModeWaveform() {
+function drawModeWaveform(deltaTime) {
     const timeDataArray = new Uint8Array(analyser.frequencyBinCount);
     analyser.getByteTimeDomainData(timeDataArray);
 
-    if (!smoothedTimeData || smoothedTimeData.length !== timeDataArray.length) {
-        smoothedTimeData = new Float32Array(timeDataArray.length);
-        smoothedTimeData.fill(128);
+    const centerY = eqCanvas.height / 2;
+    const currentSample = timeDataArray[Math.floor(timeDataArray.length / 2)];
+    const amplitude = (currentSample - 128) * SENSITIVITY;
+    const newY = { top: centerY + amplitude, bottom: centerY - amplitude };
+
+    waveformHistory.push({ ...newY, timestamp: performance.now() });
+
+    const historyDurationMs = WAVEFORM_DURATION * 1000;
+    const cutoffTime = performance.now() - historyDurationMs;
+
+    while (waveformHistory.length > 2 && waveformHistory[0].timestamp < cutoffTime) {
+        waveformHistory.shift();
     }
 
-    for (let i = 0; i < timeDataArray.length; i++) {
-        smoothedTimeData[i] = smoothedTimeData[i] * WAVEFORM_SMOOTHING + timeDataArray[i] * (1 - WAVEFORM_SMOOTHING);
+    eqCtx.save();
+    eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    eqCtx.font = '10px Arial';
+    eqCtx.textAlign = 'center';
+    
+    for (let i = 1; i < WAVEFORM_DURATION; i++) {
+        const x = eqCanvas.width * (i / WAVEFORM_DURATION);
+        eqCtx.beginPath();
+        eqCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        eqCtx.setLineDash([2, 4]);
+        eqCtx.moveTo(x, 0);
+        eqCtx.lineTo(x, eqCanvas.height);
+        eqCtx.stroke();
+        eqCtx.fillText(`-${WAVEFORM_DURATION - i}s`, x, eqCanvas.height - 5);
     }
+    eqCtx.restore();
 
     const activeTheme = EQ_THEMES[currentThemeIndex];
     let strokeStyle;
-    let fillStyle;
-
     if (activeTheme.name === 'Server Themecolor') {
         strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-4').trim() || '#00ff00';
     } else if (activeTheme.colors.length === 1) {
@@ -1263,40 +1283,38 @@ function drawModeWaveform() {
         activeTheme.colors.forEach((c, i) => gradient.addColorStop(i / (activeTheme.colors.length - 1), c));
         strokeStyle = gradient;
     }
-    fillStyle = strokeStyle;
-
-    const centerY = eqCanvas.height / 2;
-    eqCtx.beginPath();
-    eqCtx.moveTo(0, centerY);
-
-    for (let i = 0; i < smoothedTimeData.length; i++) {
-        const amplitude = (smoothedTimeData[i] - 128) * WAVEFORM_SENSITIVITY;
-        const x = (i / smoothedTimeData.length) * eqCanvas.width;
-        const y = centerY + amplitude;
-        eqCtx.lineTo(x, y);
-    }
-
-    for (let i = smoothedTimeData.length - 1; i >= 0; i--) {
-        const amplitude = (smoothedTimeData[i] - 128) * WAVEFORM_SENSITIVITY;
-        const x = (i / smoothedTimeData.length) * eqCanvas.width;
-        const y = centerY - amplitude;
-        eqCtx.lineTo(x, y);
-    }
-
-    eqCtx.closePath();
-
+    
+    eqCtx.strokeStyle = strokeStyle;
+    eqCtx.lineWidth = 2;
     if (WAVEFORM_GLOW_SIZE > 0) {
         eqCtx.shadowBlur = WAVEFORM_GLOW_SIZE;
         eqCtx.shadowColor = strokeStyle;
     }
 
-    eqCtx.globalAlpha = 0.5;
-    eqCtx.fillStyle = fillStyle;
-    eqCtx.fill();
-    
-    eqCtx.globalAlpha = 1.0;
-    eqCtx.lineWidth = 2;
-    eqCtx.strokeStyle = strokeStyle;
+    const sliceWidth = eqCanvas.width / (waveformHistory.length - 1);
+
+    eqCtx.beginPath();
+    for (let i = 0; i < waveformHistory.length; i++) {
+        const x = i * sliceWidth;
+        const y = waveformHistory[i].top;
+        if (i === 0) {
+            eqCtx.moveTo(x, y);
+        } else {
+            eqCtx.lineTo(x, y);
+        }
+    }
+    eqCtx.stroke();
+
+    eqCtx.beginPath();
+    for (let i = 0; i < waveformHistory.length; i++) {
+        const x = i * sliceWidth;
+        const y = waveformHistory[i].bottom;
+        if (i === 0) {
+            eqCtx.moveTo(x, y);
+        } else {
+            eqCtx.lineTo(x, y);
+        }
+    }
     eqCtx.stroke();
 
     eqCtx.shadowBlur = 0;
