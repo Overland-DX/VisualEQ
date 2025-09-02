@@ -6,7 +6,7 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.5.1 :: CONFIGURATION
+    // VisualEQ v1.5.2 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
@@ -72,8 +72,8 @@
 
     // --- Visualizer Physics & Appearance ---
     const SENSITIVITY_DEFAULT = 0.8; // The default vertical sensitivity of the visualizer.
-    const SENSITIVITY_MIN = 0.5; // The minimum value for the sensitivity slider.
-    const SENSITIVITY_MAX = 1.5; // The maximum value for the sensitivity slider.
+    const SENSITIVITY_MIN = 0.1; // The minimum value for the sensitivity slider.
+    const SENSITIVITY_MAX = 1.9; // The maximum value for the sensitivity slider.
 
     const FALL_SPEED = 120; // How quickly the bars fall (higher value = faster fall).
     const HORIZONTAL_MARGIN = 5; // The space (in pixels) on the left and right edges of the visualizer.
@@ -163,12 +163,12 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.5.1';
+    const PLUGIN_VERSION = 'v1.5.2';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
     let SENSITIVITY = SENSITIVITY_DEFAULT;
-    let audioContext, analyser, dataArray;
+    let audioContext, channelSplitter, analyserLeft, analyserRight, dataArrayLeft, dataArrayRight;
     let eqCanvas, eqCtx;
     let showPeakMeter = true;
     let peakHeights = [];
@@ -183,6 +183,7 @@
     let originalFlagsContainerRef = null;
     let settingsButtonRef = null;
     let currentThemeIndex = 0;
+	let isWaveformStereo = true;
 	let smoothedTimeData = null;
     let ptyElementRef = null;
     let flagsElementRef = null;
@@ -251,7 +252,12 @@ function setupPlugin() {
     showSpectrumGrid = storedGrid !== null ? (storedGrid === 'true') : SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID;
 	
 	const storedSensitivity = localStorage.getItem('visualeqSensitivity');
+    console.log("Lest 'visualeqSensitivity' fra localStorage:", storedSensitivity);
     SENSITIVITY = storedSensitivity !== null ? parseFloat(storedSensitivity) : SENSITIVITY_DEFAULT;
+    console.log("Sensitivitet satt til:", SENSITIVITY);
+
+    const storedWaveStereo = localStorage.getItem('visualeqWaveformStereo');
+    isWaveformStereo = storedWaveStereo !== null ? (storedWaveStereo === 'true') : true;
 
     injectPluginStyles();
     settingsButtonRef = createSettingsButton();
@@ -691,6 +697,19 @@ function createSettingsModal() {
         localStorage.setItem('visualeqShowGrid', showSpectrumGrid);
     };
 
+    const waveformStereoContainer = document.createElement('div');
+    waveformStereoContainer.className = 'visualeq-checkbox-container';
+    waveformStereoContainer.innerHTML = `
+      <label for="visualeq-wave-stereo-toggle-input">Stereo View</label>
+      <label class="visualeq-switch">
+        <input type="checkbox" id="visualeq-wave-stereo-toggle-input" ${isWaveformStereo ? 'checked' : ''}>
+        <span class="visualeq-slider"></span>
+      </label>`;
+    waveformStereoContainer.querySelector('#visualeq-wave-stereo-toggle-input').onchange = (e) => {
+        isWaveformStereo = e.target.checked;
+        localStorage.setItem('visualeqWaveformStereo', isWaveformStereo);
+    };
+
     const modeSelect = document.createElement('select');
     VISUALIZER_MODES.forEach(mode => {
       modeSelect.innerHTML += `<option value="${mode}" ${mode === currentVisualizerMode ? 'selected' : ''}>${mode}</option>`;
@@ -699,11 +718,12 @@ function createSettingsModal() {
     const handleModeChange = (selectedMode) => {
         currentVisualizerMode = selectedMode;
         localStorage.setItem('visualeqMode', currentVisualizerMode);
+        
         gridToggleContainer.style.display = (selectedMode === 'Spectrum') ? 'flex' : 'none';
+        waveformStereoContainer.style.display = (selectedMode === 'Waveform') ? 'flex' : 'none';
     };
     
     modeSelect.onchange = (e) => handleModeChange(e.target.value);
-    handleModeChange(currentVisualizerMode); 
 
 	qualitySelect.onchange = () => {
 		const newFftSize = parseInt(qualitySelect.value, 10);
@@ -720,7 +740,7 @@ function createSettingsModal() {
     sensLabelEl.htmlFor = 'sensitivity';
     sensLabelEl.innerHTML = `Sensitivity <span>(${SENSITIVITY.toFixed(1)})</span>`;
     
-    sensitivitySlider.oninput = () => {
+sensitivitySlider.oninput = () => {
         SENSITIVITY = parseFloat(sensitivitySlider.value);
         sensLabelEl.querySelector('span').textContent = `(${SENSITIVITY.toFixed(1)})`;
         localStorage.setItem('visualeqSensitivity', SENSITIVITY);
@@ -754,6 +774,7 @@ function createSettingsModal() {
     scrollableArea.append(
         createControlSection('Theme', themeSelect),
         createControlSection('Visualizer Mode', modeSelect, '1.5em'),
+        waveformStereoContainer,
         gridToggleContainer, 
         createControlSection('Analyser Quality', qualitySelect, '1.5em'),
         peakMeterContainer,
@@ -765,6 +786,8 @@ function createSettingsModal() {
     header.append(closeButton);
     modalOverlay.appendChild(modalContent);
     document.body.appendChild(modalOverlay);
+
+    handleModeChange(currentVisualizerMode); 
 
     const closeModal = () => modalOverlay.style.display = 'none';
     modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeModal(); };
@@ -871,11 +894,26 @@ function startOrRestartEQ() {
     if (audioContext.state === 'suspended') audioContext.resume();
     
     const liveAudioPlayer = Stream.Fallback.Player;
-    if (analyser) try { liveAudioPlayer.Amplification.disconnect(analyser); } catch (e) {}
+    
+    if (channelSplitter) {
+        try { liveAudioPlayer.Amplification.disconnect(channelSplitter); } catch (e) {}
+    } else if (analyserLeft) { 
+        try { liveAudioPlayer.Amplification.disconnect(analyserLeft); } catch (e) {}
+    }
 
-    analyser = audioContext.createAnalyser();
-    Object.assign(analyser, { fftSize: currentFftSize, smoothingTimeConstant: 0.6 });
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    channelSplitter = audioContext.createChannelSplitter(2);
+
+    analyserLeft = audioContext.createAnalyser();
+    Object.assign(analyserLeft, { fftSize: currentFftSize, smoothingTimeConstant: 0.6 });
+    dataArrayLeft = new Uint8Array(analyserLeft.frequencyBinCount);
+
+    analyserRight = audioContext.createAnalyser();
+    Object.assign(analyserRight, { fftSize: currentFftSize, smoothingTimeConstant: 0.6 });
+    dataArrayRight = new Uint8Array(analyserRight.frequencyBinCount);
+    
+    liveAudioPlayer.Amplification.connect(channelSplitter);
+    channelSplitter.connect(analyserLeft, 0);
+    channelSplitter.connect(analyserRight, 1);
     
     if (currentBarHeights.length !== 20) {
       currentBarHeights = new Array(20).fill(0);
@@ -883,7 +921,6 @@ function startOrRestartEQ() {
       peakHoldTimers = new Array(20).fill(0);
     }
     
-    liveAudioPlayer.Amplification.connect(analyser);
     lastFrameTime = performance.now();
     animationFrameId = requestAnimationFrame(drawEQ);
 }
@@ -916,24 +953,24 @@ const bandRanges_20_bands_definition = [
     { start: 580, end: 640 }  // ~15 kHz
 ];
 
-function calculateBandLevels(numBands) {
-  if (!dataArray || !audioContext) return new Array(numBands).fill(0);
+function calculateBandLevels(numBands, frequencyData) { 
+  if (!frequencyData || !audioContext) return new Array(numBands).fill(0);
 
   if (numBands === 20) {
     const definition = bandRanges_20_bands_definition;
-    if (dataArray.length < 801) { 
-        const scale = dataArray.length / 801;
+    if (frequencyData.length < 801) { 
+        const scale = frequencyData.length / 801;
         return definition.map(range => {
             let sum = 0;
             const start = Math.floor(range.start * scale);
             const end = Math.floor(range.end * scale);
-            for (let i = start; i <= end; i++) sum += dataArray[i] || 0;
+            for (let i = start; i <= end; i++) sum += frequencyData[i] || 0;
             return sum / ((end - start + 1) || 1);
         });
     }
     return definition.map(range => {
       let sum = 0;
-      for (let i = range.start; i <= range.end; i++) sum += dataArray[i] || 0;
+      for (let i = range.start; i <= range.end; i++) sum += frequencyData[i] || 0;
       return sum / ((range.end - range.start + 1) || 1);
     });
   }
@@ -942,8 +979,8 @@ function calculateBandLevels(numBands) {
   const targetFrequencyCutoff = 16000;
   const maxPossibleFrequency = audioContext.sampleRate / 2;
   const maxIndex = Math.min(
-      dataArray.length - 1,
-      Math.floor((targetFrequencyCutoff / maxPossibleFrequency) * dataArray.length)
+      frequencyData.length - 1,
+      Math.floor((targetFrequencyCutoff / maxPossibleFrequency) * frequencyData.length)
   );
 
   let lastIndex = 1;
@@ -954,9 +991,9 @@ function calculateBandLevels(numBands) {
     
     let sum = 0;
     let count = 0;
-    if (startIndex <= endIndex && startIndex < dataArray.length) {
+    if (startIndex <= endIndex && startIndex < frequencyData.length) {
         for (let j = startIndex; j <= endIndex; j++) {
-            sum += dataArray[j] || 0;
+            sum += frequencyData[j] || 0;
             count++;
         }
     }
@@ -967,7 +1004,7 @@ function calculateBandLevels(numBands) {
 }
 
 function drawEQ(currentTime) {
-    if (!analyser || (audioContext && audioContext.state !== 'running')) {
+    if (!analyserLeft || (audioContext && audioContext.state !== 'running')) {
         if (currentBarHeights.every(h => h === 0) && peakHeights.every(h => h === 0)) {
             animationFrameId = null;
             return;
@@ -979,10 +1016,17 @@ function drawEQ(currentTime) {
     
     let bandLevels;
     if (currentVisualizerMode !== 'Waveform') {
-        if (analyser && audioContext && audioContext.state === 'running') {
-            analyser.getByteFrequencyData(dataArray);
+        if (analyserLeft && analyserRight && audioContext && audioContext.state === 'running') {
+            analyserLeft.getByteFrequencyData(dataArrayLeft);
+            analyserRight.getByteFrequencyData(dataArrayRight);
+
+            const combinedDataArray = new Uint8Array(dataArrayLeft.length);
+            for (let i = 0; i < dataArrayLeft.length; i++) {
+                combinedDataArray[i] = (dataArrayLeft[i] + dataArrayRight[i]) / 2;
+            }
+
             const numBands = (currentVisualizerMode === 'Spectrum' || currentVisualizerMode === 'Circle') ? 60 : 20;
-            bandLevels = calculateBandLevels(numBands);
+            bandLevels = calculateBandLevels(numBands, combinedDataArray);
         } else {
             const numBands = (currentVisualizerMode === 'Spectrum' || currentVisualizerMode === 'Circle') ? 60 : 20;
             bandLevels = new Array(numBands).fill(0);
@@ -1238,19 +1282,31 @@ function drawModeSpectrum(bandLevels) {
 }
 
 function drawModeWaveform(deltaTime) {
-    const timeDataArray = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteTimeDomainData(timeDataArray);
+    if (!analyserLeft || !analyserRight) return;
+
+    analyserLeft.getByteTimeDomainData(dataArrayLeft);
+    analyserRight.getByteTimeDomainData(dataArrayRight);
 
     const centerY = eqCanvas.height / 2;
-    const currentSample = timeDataArray[Math.floor(timeDataArray.length / 2)];
-    const amplitude = (currentSample - 128) * SENSITIVITY;
-    const newY = { top: centerY + amplitude, bottom: centerY - amplitude };
+    let newY; 
+
+    if (isWaveformStereo) {
+        const leftSample = dataArrayLeft[Math.floor(dataArrayLeft.length / 2)];
+        const rightSample = dataArrayRight[Math.floor(dataArrayRight.length / 2)];
+        const leftAmplitude = (leftSample - 128) * SENSITIVITY;
+        const rightAmplitude = (rightSample - 128) * SENSITIVITY;
+        newY = { top: centerY - leftAmplitude, bottom: centerY - rightAmplitude };
+    } else {
+        const leftSample = dataArrayLeft[Math.floor(dataArrayLeft.length / 2)];
+        const rightSample = dataArrayRight[Math.floor(dataArrayRight.length / 2)];
+        const monoSample = (leftSample + rightSample) / 2;
+        const monoAmplitude = (monoSample - 128) * SENSITIVITY;
+        newY = { top: centerY - monoAmplitude, bottom: centerY + monoAmplitude };
+    }
 
     waveformHistory.push({ ...newY, timestamp: performance.now() });
-
     const historyDurationMs = WAVEFORM_DURATION * 1000;
     const cutoffTime = performance.now() - historyDurationMs;
-
     while (waveformHistory.length > 2 && waveformHistory[0].timestamp < cutoffTime) {
         waveformHistory.shift();
     }
@@ -1259,7 +1315,6 @@ function drawModeWaveform(deltaTime) {
     eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
     eqCtx.font = '10px Arial';
     eqCtx.textAlign = 'center';
-    
     for (let i = 1; i < WAVEFORM_DURATION; i++) {
         const x = eqCanvas.width * (i / WAVEFORM_DURATION);
         eqCtx.beginPath();
@@ -1283,25 +1338,20 @@ function drawModeWaveform(deltaTime) {
         activeTheme.colors.forEach((c, i) => gradient.addColorStop(i / (activeTheme.colors.length - 1), c));
         strokeStyle = gradient;
     }
-    
     eqCtx.strokeStyle = strokeStyle;
     eqCtx.lineWidth = 2;
     if (WAVEFORM_GLOW_SIZE > 0) {
         eqCtx.shadowBlur = WAVEFORM_GLOW_SIZE;
         eqCtx.shadowColor = strokeStyle;
     }
-
     const sliceWidth = eqCanvas.width / (waveformHistory.length - 1);
 
     eqCtx.beginPath();
     for (let i = 0; i < waveformHistory.length; i++) {
         const x = i * sliceWidth;
         const y = waveformHistory[i].top;
-        if (i === 0) {
-            eqCtx.moveTo(x, y);
-        } else {
-            eqCtx.lineTo(x, y);
-        }
+        if (i === 0) eqCtx.moveTo(x, y);
+        else eqCtx.lineTo(x, y);
     }
     eqCtx.stroke();
 
@@ -1309,14 +1359,10 @@ function drawModeWaveform(deltaTime) {
     for (let i = 0; i < waveformHistory.length; i++) {
         const x = i * sliceWidth;
         const y = waveformHistory[i].bottom;
-        if (i === 0) {
-            eqCtx.moveTo(x, y);
-        } else {
-            eqCtx.lineTo(x, y);
-        }
+        if (i === 0) eqCtx.moveTo(x, y);
+        else eqCtx.lineTo(x, y);
     }
     eqCtx.stroke();
-
     eqCtx.shadowBlur = 0;
 }
 
