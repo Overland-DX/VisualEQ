@@ -26,7 +26,7 @@ A customizable 20-band visual equalizer and UI enhancement plugin for the fm-dx 
 
 ---
 
-<img width="2111" height="591" alt="bilde" src="https://github.com/user-attachments/assets/5fa2b938-2756-4ee1-b84e-648328b79169" />
+<img width="1812" height="585" alt="bilde" src="https://github.com/user-attachments/assets/7833e298-97b5-4e6c-a60a-dd41927108df" />
 <br>
 
 ---
