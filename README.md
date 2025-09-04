@@ -1,62 +1,76 @@
 # VisualEQ for fm-dx-webserver
 
-![Version](https://img.shields.io/badge/version-1.5.3-blue)
+![Version](https://img.shields.io/badge/version-1.6.0-blue)
 ![Compatibility](https://img.shields.io/badge/fm--dx--webserver-v1.3.9-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-A customizable 20-band visual equalizer and UI enhancement plugin for the fm-dx webserver. VisualEQ replaces the standard flags container with a dynamic audio spectrum analyzer and provides a comprehensive settings modal to tailor the experience to your liking.
+A feature-rich audio visualizer and UI enhancement plugin for the fm-dx webserver. VisualEQ replaces the standard flags container with a dynamic audio visualizer, offering six distinct modes, deep customization, and per-mode profiles to create your perfect listening experience.
+What's New in v1.6?
 
----
+This version represents a major overhaul, moving VisualEQ from a single equalizer to a multi-mode visualization tool.
 
-### Screenshot
+    Multi-Mode Visualizer: Choose between six unique visualizer modes: Bars, LED, Spectrum, Waveform, Circle, and Mirrored Bars.
 
+    Per-Mode Settings Profiles: Your preferences for themes, sensitivity, and mode-specific options are now saved individually for each
+    visualizer mode.
 
+    Expanded Customization: New controls have been added, including a Neon Glow effect for Waveform mode and toggleable background grids
+    for several modes.
+
+    UI and Performance Enhancements: Countless small fixes and optimizations for a smoother experience.
+
+Screenshots
+<!-- Add your new screenshots here! It's a good idea to show off the new modes like Waveform and Circle. -->
 <img width="2106" height="602" alt="bilde" src="https://github.com/user-attachments/assets/051e1535-6062-4300-8c24-a988fba7e3ce" />
 <br>
-
----
-
 <img width="2125" height="628" alt="bilde" src="https://github.com/user-attachments/assets/7f40acea-78bc-4ecf-87e6-1cc40d85a427" />
 <br>
+Core Features
 
----
+VisualEQ is designed for flexibility, automatically saving all your choices in your browser's local storage.
 
-<img width="2110" height="617" alt="bilde" src="https://github.com/user-attachments/assets/a22714ee-b800-4705-917a-ff405b7f96f5" />
+    Six Unique Visualizer Modes:
+
+        Bars: A classic frequency-band visualizer.
+
+        LED: Simulates a physical LED-style display.
+
+        Spectrum: A smooth, flowing graph of the audio spectrum.
+
+        Waveform: A real-time oscilliscope view of the audio signal.
+
+        Circle: Splits frequencies into Bass, Mid, and Treble in a three-panel radial display.
+
+        Mirrored Bars: A symmetrical version of the classic Bars mode.
+
+    Comprehensive Settings Modal: A single, clean panel gives you full control.
+
+        Theme Selection: Choose from a wide variety of solid colors and gradients, or select "Server Themecolor" to automatically match 
+        your fm-dx-webserver theme.
+
+        Per-Mode Customization: Fine-tune each mode with specific options like Show Peak Meter, Background Grids, Stereo View,
+        Waveform Duration, and Neon Glow.
+
+        Global Controls: Adjust the master Sensitivity of the visualizer and the Analyser Quality (FFT size) to balance
+        detail and performance.
+
+    Persistent Profiles: All your settings for themes, quality, sensitivity, and mode-specific toggles are saved automatically
+    and reloaded on your next visit.
+
+    Seamless UI Integration: The PTY (Program Type) and TP/TA flags are cleanly relocated above the station name for a modern, 
+    integrated look.
+
+Performance Considerations
+
+VisualEQ utilizes your browser's rendering and audio processing capabilities, which can consume CPU resources. The Waveform mode, in particular, can be more demanding due to the continuous drawing of audio history.
+
+If you experience performance issues, consider lowering the Analyser Quality in the settings or using a less demanding mode like Bars or LED.
+Project Status
+
+VisualEQ is now considered feature-complete. Future development will primarily focus on bug fixes, performance optimizations, and maintaining compatibility with future versions of the fm-dx-webserver.
+
+Please continue to report any bugs by opening an issue on this GitHub page.
 <br>
-
----
-
-<img width="1812" height="585" alt="bilde" src="https://github.com/user-attachments/assets/7833e298-97b5-4e6c-a60a-dd41927108df" />
-<br>
-
----
-
-<img width="2102" height="592" alt="bilde" src="https://github.com/user-attachments/assets/2ea2f3ad-a073-47b2-8d57-7c3f10ea47dd" />
-<br>
-
----
-
-<img width="2097" height="584" alt="bilde" src="https://github.com/user-attachments/assets/dfe67988-8731-4d84-aa23-6d81252a94cc" />
-
-
-
----
-
-> **Disclaimer: Early Release**
-> This is an early version of VisualEQ. While it has been tested for core functionality, bugs may still be present. Please use it with this in mind and feel free to report any issues you encounter by opening an issue on this GitHub page.
-
-## Features
-
-VisualEQ is designed to be highly customizable and user-friendly. All your settings are automatically saved in your browser's local storage.
-
-*   **20-Band Spectrum Analyzer:** A detailed and responsive audio visualizer that gives you insight into the audio spectrum.
-*   **Dynamic PTY Relocation:** The PTY (Program Type) and TP/TA flags are cleanly relocated above the station name for a more integrated look.
-*   **Comprehensive Settings Modal:** A single, clean settings panel gives you full control.
-    *   **Customizable Themes:** Choose from several pre-defined color themes (Classic, Ocean, Fire, Matrix, Synth) for the equalizer.
-    *   **Adjustable Analyser Quality:** Select the FFT size (Low, Medium, High, Ultra) to balance between frequency detail and CPU performance. You can also turn the visualizer off completely.
-    *   **Real-time Sensitivity Control:** Use a simple slider to adjust the vertical amplification of the equalizer bars in real-time.
-*   **Persistent Settings:** All your choices for theme, quality, and sensitivity are automatically saved and remembered for your next visit.
-
 ## Installation
 
 1.  Download the `visualeq.js` and `/visualEQ/visualEQ_main.js` file from this repository.
@@ -82,4 +96,6 @@ This project was made possible by building upon the work of others and with the 
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License. This is a permissive license that allows for reuse within proprietary software provided that all copies of the licensed software include a copy of the MIT License terms and the copyright notice.
+
+For the full license text, please see the [LICENSE](LICENSE) file included in this repository.
