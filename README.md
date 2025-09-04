@@ -19,12 +19,24 @@ This version represents a major overhaul, moving VisualEQ from a single equalize
 
     UI and Performance Enhancements: Countless small fixes and optimizations for a smoother experience.
 
+---
+
 Screenshots
 <!-- Add your new screenshots here! It's a good idea to show off the new modes like Waveform and Circle. -->
 <img width="2106" height="602" alt="bilde" src="https://github.com/user-attachments/assets/051e1535-6062-4300-8c24-a988fba7e3ce" />
 <br>
+
+---
+
 <img width="2125" height="628" alt="bilde" src="https://github.com/user-attachments/assets/7f40acea-78bc-4ecf-87e6-1cc40d85a427" />
 <br>
+
+---
+
+<img width="1795" height="539" alt="bilde" src="https://github.com/user-attachments/assets/abb4d81f-6885-4f01-8882-a82efe810d05" />
+<br>
+
+---
 Core Features
 
 VisualEQ is designed for flexibility, automatically saving all your choices in your browser's local storage.
