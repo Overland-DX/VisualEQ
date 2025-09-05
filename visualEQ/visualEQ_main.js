@@ -6,7 +6,7 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.6.0 :: CONFIGURATION
+    // VisualEQ v1.6.2 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
@@ -179,7 +179,7 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.6.0';
+    const PLUGIN_VERSION = 'v1.6.2';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
@@ -1859,3 +1859,4 @@ setInterval(() => {
     }
 }, 1000);
 })();
+
