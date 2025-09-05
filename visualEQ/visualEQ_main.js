@@ -1350,7 +1350,7 @@ function drawEQ(currentTime) {
                 const centerY = eqCanvas.height / 2;
                 let newY;
 
-                const waveformSensitivityMultiplier = 2.0; 
+                const waveformSensitivityMultiplier = 0.6; 
                 const effectiveSensitivity = SENSITIVITY * waveformSensitivityMultiplier;
 
                 if (isWaveformStereo) {
@@ -1859,4 +1859,5 @@ setInterval(() => {
     }
 }, 1000);
 })();
+
 
