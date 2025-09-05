@@ -28,7 +28,7 @@
 
         // Default visualizer mode.
         // Options: 'Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars'
-        DEFAULT_VISUALIZER_MODE: 'Spectrum',
+        DEFAULT_VISUALIZER_MODE: 'LED',
 
         // --- Mode-Specific Defaults ---
         // Default setting for the peak meter ('Bars', 'LED', 'Circle', 'Mirrored Bars' modes)
@@ -109,6 +109,7 @@
 
 	// --- Waveform Mode Specific ---
 	const WAVEFORM_GLOW_DEFAULT = 0;   // The default "neon glow" size.
+	let waveformGlowSize = WAVEFORM_GLOW_DEFAULT; // This will now hold the current value.
 	const WAVEFORM_DURATION_DEFAULT = 5; // Default duration in seconds.
 	const WAVEFORM_DURATION_MIN = 2;     // Minimum duration for the slider.
 	const WAVEFORM_DURATION_MAX = 10;    // Maximum duration for the slider.
@@ -222,7 +223,6 @@
 	let latestBandLevels = [];
 	let cachedCircleColors = {};
 	let showBarsGrid = true;
-	let waveformGlowSize = WAVEFORM_GLOW_DEFAULT; 
 	
 
     // ────────────────────────────────────────────────────────────
@@ -274,17 +274,18 @@ function setupPlugin() {
         return;
     }
 
-
     const storedMode = localStorage.getItem('visualeqMode');
     currentVisualizerMode = storedMode !== null ? storedMode : SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
     
     currentThemeIndex = parseInt(loadSettingForMode(currentVisualizerMode, 'themeIndex', DEFAULT_THEME_INDEX), 10);
     SENSITIVITY = parseFloat(loadSettingForMode(currentVisualizerMode, 'sensitivity', SENSITIVITY_DEFAULT));
-    showPeakMeter = (loadSettingForMode(currentVisualizerMode, 'showPeak', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER) === 'true');
-    showSpectrumGrid = (loadSettingForMode(currentVisualizerMode, 'showGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID) === 'true');
-    showBarsGrid = (loadSettingForMode(currentVisualizerMode, 'showBarsGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID) === 'true');
-    isWaveformStereo = (loadSettingForMode(currentVisualizerMode, 'waveformStereo', true) === 'true');
-    showWaveformGrid = (loadSettingForMode(currentVisualizerMode, 'waveformGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID) === 'true');
+    
+    showPeakMeter = (String(loadSettingForMode(currentVisualizerMode, 'showPeak', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER)) === 'true');
+    showSpectrumGrid = (String(loadSettingForMode(currentVisualizerMode, 'showGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID)) === 'true');
+    showBarsGrid = (String(loadSettingForMode(currentVisualizerMode, 'showBarsGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID)) === 'true');
+    isWaveformStereo = (String(loadSettingForMode(currentVisualizerMode, 'waveformStereo', true)) === 'true');
+    showWaveformGrid = (String(loadSettingForMode(currentVisualizerMode, 'waveformGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID)) === 'true');
+    
     waveformDuration = parseFloat(loadSettingForMode(currentVisualizerMode, 'waveformDuration', WAVEFORM_DURATION_DEFAULT));
     waveformGlowSize = parseInt(loadSettingForMode(currentVisualizerMode, 'waveformGlow', SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW), 10);
 
@@ -294,7 +295,6 @@ function setupPlugin() {
         currentFftSize = 4096;
         localStorage.setItem('visualeqFftSize', currentFftSize);
     }
-
 
     injectPluginStyles();
     settingsButtonRef = createSettingsButton();
@@ -922,13 +922,15 @@ function createSettingsModal() {
 
         currentThemeIndex = parseInt(loadSettingForMode(selectedMode, 'themeIndex', DEFAULT_THEME_INDEX), 10);
         SENSITIVITY = parseFloat(loadSettingForMode(selectedMode, 'sensitivity', SENSITIVITY_DEFAULT));
-        showPeakMeter = (loadSettingForMode(selectedMode, 'showPeak', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER) === 'true');
-        showSpectrumGrid = (loadSettingForMode(selectedMode, 'showGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID) === 'true');
-        showBarsGrid = (loadSettingForMode(selectedMode, 'showBarsGrid', true) === 'true');
-        isWaveformStereo = (loadSettingForMode(selectedMode, 'waveformStereo', true) === 'true');
-        showWaveformGrid = (loadSettingForMode(selectedMode, 'waveformGrid', true) === 'true');
+        
+        showPeakMeter = (String(loadSettingForMode(selectedMode, 'showPeak', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER)) === 'true');
+        showSpectrumGrid = (String(loadSettingForMode(selectedMode, 'showGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID)) === 'true');
+        showBarsGrid = (String(loadSettingForMode(selectedMode, 'showBarsGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID)) === 'true');
+        isWaveformStereo = (String(loadSettingForMode(selectedMode, 'waveformStereo', true)) === 'true');
+        showWaveformGrid = (String(loadSettingForMode(selectedMode, 'waveformGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID)) === 'true');
+
         waveformDuration = parseFloat(loadSettingForMode(selectedMode, 'waveformDuration', WAVEFORM_DURATION_DEFAULT));
-        waveformGlowSize = parseInt(loadSettingForMode(selectedMode, 'waveformGlow', WAVEFORM_GLOW_DEFAULT), 10);
+        waveformGlowSize = parseInt(loadSettingForMode(selectedMode, 'waveformGlow', SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW), 10);
         
         updateModalUI();
         updateCachedStyles();
