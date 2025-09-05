@@ -32,16 +32,16 @@
 
         // --- Mode-Specific Defaults ---
         // Default setting for the peak meter ('Bars', 'LED', 'Circle', 'Mirrored Bars' modes)
-        DEFAULT_SHOW_PEAK_METER: true,
+        DEFAULT_SHOW_PEAK_METER: false,
 
         // Default setting for the grid ('Spectrum' mode)
-        DEFAULT_SHOW_SPECTRUM_GRID: true,
+        DEFAULT_SHOW_SPECTRUM_GRID: false,
         
         // Default setting for the grid ('Bars', 'LED' modes)
-        DEFAULT_SHOW_BARS_GRID: true,
+        DEFAULT_SHOW_BARS_GRID: false,
 
         // Default setting for the grid ('Waveform' mode)
-        DEFAULT_SHOW_WAVEFORM_GRID: true,
+        DEFAULT_SHOW_WAVEFORM_GRID: false,
 
         // Default "Neon Glow" size for 'Waveform' mode.
         // Options: 0 (off), 1-10 (glow size)
@@ -493,6 +493,8 @@ function setupVisualEQLayout() {
         if (eqCanvas && visualEqContainerRef) {
             eqCanvas.width = visualEqContainerRef.offsetWidth;
             eqCanvas.height = visualEqContainerRef.offsetHeight;
+			drawBarsGridToBuffer(); 
+            drawWaveformGrid(); 
         }
     }, 150);
 
@@ -949,7 +951,18 @@ function createSettingsModal() {
         waveformGridContainer.style.display = isWaveform ? 'flex' : 'none';
         waveformDurationContainer.style.display = isWaveform ? 'block' : 'none';
         waveformGlowContainer.style.display = isWaveform ? 'block' : 'none';
-        
+		
+        if (['Bars', 'LED'].includes(selectedMode)) {
+            drawBarsGridToBuffer();
+        } else if (selectedMode === 'Waveform') {
+            drawWaveformGrid();
+        } else {
+            if (gridCtx && gridCanvas) {
+                gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+            }
+        }
+
+
         updateHelpSection(selectedMode);
     };
 
@@ -1003,7 +1016,11 @@ function createSettingsModal() {
     
     peakMeterContainer.querySelector('input').onchange = (e) => { showPeakMeter = e.target.checked; saveSettingForMode(currentVisualizerMode, 'showPeak', showPeakMeter); };
     gridToggleContainer.querySelector('input').onchange = (e) => { showSpectrumGrid = e.target.checked; saveSettingForMode(currentVisualizerMode, 'showGrid', showSpectrumGrid); };
-    barsGridToggleContainer.querySelector('input').onchange = (e) => { showBarsGrid = e.target.checked; saveSettingForMode(currentVisualizerMode, 'showBarsGrid', showBarsGrid); };
+    barsGridToggleContainer.querySelector('input').onchange = (e) => { 
+        showBarsGrid = e.target.checked; 
+        saveSettingForMode(currentVisualizerMode, 'showBarsGrid', showBarsGrid); 
+        drawBarsGridToBuffer();
+    };
     waveformStereoContainer.querySelector('input').onchange = (e) => { isWaveformStereo = e.target.checked; saveSettingForMode(currentVisualizerMode, 'waveformStereo', isWaveformStereo); };
     waveformGridContainer.querySelector('input').onchange = (e) => { showWaveformGrid = e.target.checked; saveSettingForMode(currentVisualizerMode, 'waveformGrid', showWaveformGrid); drawWaveformGrid(); };
     qualitySelect.onchange = () => { const newFftSize = parseInt(qualitySelect.value, 10); localStorage.setItem('visualeqFftSize', newFftSize); currentFftSize = newFftSize; startOrRestartEQ(); };
@@ -1325,25 +1342,29 @@ function drawEQ(currentTime) {
                 updateBarHeights(bandLevels, TARGET_INTERVAL / 1000);
             }
         }
-        else {
+		else { 
             if (analyserLeft && analyserRight) {
                 analyserLeft.getByteTimeDomainData(dataArrayLeft);
                 analyserRight.getByteTimeDomainData(dataArrayRight);
                 
                 const centerY = eqCanvas.height / 2;
                 let newY;
+
+                const waveformSensitivityMultiplier = 2.0; 
+                const effectiveSensitivity = SENSITIVITY * waveformSensitivityMultiplier;
+
                 if (isWaveformStereo) {
                     const leftSample = dataArrayLeft[Math.floor(dataArrayLeft.length / 2)];
                     const rightSample = dataArrayRight[Math.floor(dataArrayRight.length / 2)];
                     newY = { 
-                        top: centerY - (leftSample - 128) * SENSITIVITY, 
-                        bottom: centerY - (rightSample - 128) * SENSITIVITY 
+                        top: centerY - (leftSample - 128) * effectiveSensitivity, 
+                        bottom: centerY - (rightSample - 128) * effectiveSensitivity 
                     };
                 } else {
                     const monoSample = (dataArrayLeft[Math.floor(dataArrayLeft.length / 2)] + dataArrayRight[Math.floor(dataArrayRight.length / 2)]) / 2;
                     newY = { 
-                        top: centerY - (monoSample - 128) * SENSITIVITY, 
-                        bottom: centerY + (monoSample - 128) * SENSITIVITY 
+                        top: centerY - (monoSample - 128) * effectiveSensitivity, 
+                        bottom: centerY + (monoSample - 128) * effectiveSensitivity 
                     };
                 }
                 
@@ -1410,32 +1431,46 @@ function drawBarsGrid() {
     eqCtx.restore();
 }
 
-function drawModeBars() {
-  if (showBarsGrid) {
+function drawBarsGridToBuffer() {
+    if (!gridCtx || !gridCanvas || !eqCanvas || !isEqLayoutActive) return;
+
+    gridCanvas.width = eqCanvas.width;
+    gridCanvas.height = eqCanvas.height;
+
+    gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+
+    if (!showBarsGrid) return;
+
     const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
-    const barWidth = (totalDrawingWidth - (BAR_SPACING * (currentBarHeights.length - 1))) / currentBarHeights.length;
+    const numBars = 20; 
+    const barWidth = (totalDrawingWidth - (BAR_SPACING * (numBars - 1))) / numBars;
     
-    eqCtx.save();
-    eqCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    eqCtx.lineWidth = 0.5;
+    gridCtx.save();
+    gridCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    gridCtx.lineWidth = 0.5;
 
     for (let i = 1; i <= 5; i++) {
         const y = eqCanvas.height * (i / 6);
-        eqCtx.beginPath();
-        eqCtx.moveTo(0, y);
-        eqCtx.lineTo(eqCanvas.width, y);
-        eqCtx.stroke();
-    }
-    
-    for (let i = 0; i < currentBarHeights.length - 1; i++) {
-        const lineX = HORIZONTAL_MARGIN + (i * (barWidth + BAR_SPACING)) + barWidth + (BAR_SPACING / 2);
-        eqCtx.beginPath();
-        eqCtx.moveTo(lineX, 0);
-        eqCtx.lineTo(lineX, eqCanvas.height);
-        eqCtx.stroke();
+        gridCtx.beginPath();
+        gridCtx.moveTo(0, y);
+        gridCtx.lineTo(eqCanvas.width, y);
+        gridCtx.stroke();
     }
 
-    eqCtx.restore();
+    for (let i = 0; i < numBars - 1; i++) {
+        const lineX = HORIZONTAL_MARGIN + (i * (barWidth + BAR_SPACING)) + barWidth + (BAR_SPACING / 2);
+        gridCtx.beginPath();
+        gridCtx.moveTo(lineX, 0);
+        gridCtx.lineTo(lineX, eqCanvas.height);
+        gridCtx.stroke();
+    }
+
+    gridCtx.restore();
+}
+
+function drawModeBars() {
+  if (showBarsGrid) {
+    eqCtx.drawImage(gridCanvas, 0, 0);
   }
 
   const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
@@ -1472,35 +1507,11 @@ function drawModeBars() {
 
 function drawModeLed() {
   if (showBarsGrid) {
-    const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
-    const barWidth = (totalDrawingWidth - (BAR_SPACING * (currentBarHeights.length - 1))) / currentBarHeights.length;
-    
-    eqCtx.save();
-    eqCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    eqCtx.lineWidth = 0.5;
-    
-    for (let i = 1; i <= 5; i++) {
-        const y = eqCanvas.height * (i / 6);
-        eqCtx.beginPath();
-        eqCtx.moveTo(0, y);
-        eqCtx.lineTo(eqCanvas.width, y);
-        eqCtx.stroke();
-    }
-
-    for (let i = 0; i < currentBarHeights.length - 1; i++) {
-        const lineX = HORIZONTAL_MARGIN + (i * (barWidth + BAR_SPACING)) + barWidth + (BAR_SPACING / 2);
-        eqCtx.beginPath();
-        eqCtx.moveTo(lineX, 0);
-        eqCtx.lineTo(lineX, eqCanvas.height);
-        eqCtx.stroke();
-    }
-
-    eqCtx.restore();
+    eqCtx.drawImage(gridCanvas, 0, 0);
   }
 
   const totalDrawingWidth = eqCanvas.width - (HORIZONTAL_MARGIN * 2);
   const barWidth = (totalDrawingWidth - (BAR_SPACING * (currentBarHeights.length - 1))) / currentBarHeights.length;
-
   const totalBlockHeight = eqCanvas.height - (LED_BLOCK_SPACING * (LED_BLOCK_COUNT - 1));
   const blockHeight = totalBlockHeight / LED_BLOCK_COUNT;
 
