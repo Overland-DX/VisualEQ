@@ -6,46 +6,76 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.6.2 :: CONFIGURATION
+    // VisualEQ v1.6.3 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
-    // SECTION 0: SERVER OWNER DEFAULTS (NEW)
+    // SECTION 0: SERVER OWNER DEFAULTS
     // -----------------------------------------------------------------------------------
     // This section allows the server owner to set the default appearance and behavior
     // for first-time users or users who have not saved their own settings yet.
     // Once a user changes a setting in the settings modal, their choice will be saved
     // and will override these defaults.
-    const SERVER_OWNER_DEFAULTS = {
-        // --- General Defaults ---
+	const SERVER_OWNER_DEFAULTS = {
+        // ===================================================================================
+        // SECTION A: GENERAL DEFAULTS
+        // ===================================================================================
+
         // Should the plugin be enabled by default for new users?
-        // Options: true (on), false (off)
+        // Valid options: true, false
         DEFAULT_PLUGIN_ENABLED: true,
 
         // Default theme for the visualizer.
-        // IMPORTANT: You must use the exact theme name from the 'EQ_THEMES' list below.
+        // IMPORTANT: The name must exactly match a theme name from the 'EQ_THEMES' list below.
         DEFAULT_THEME_NAME: 'Server Themecolor',
 
-        // Default visualizer mode.
-        // Options: 'Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars'
-        DEFAULT_VISUALIZER_MODE: 'LED',
+        // Default visualizer mode shown to first-time users.
+        // Valid options: 'Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars'
+        DEFAULT_VISUALIZER_MODE: 'Bars',
 
-        // --- Mode-Specific Defaults ---
-        // Default setting for the peak meter ('Bars', 'LED', 'Circle', 'Mirrored Bars' modes)
+
+        // ===================================================================================
+        // SECTION B: MODE-SPECIFIC DEFAULTS
+        // ===================================================================================
+
+        // Should the "Peak Meter" (the top-most line/dot) be shown by default?
+        // Applies to modes: 'Bars', 'LED', 'Circle', 'Mirrored Bars'.
+        // Valid options: true, false
         DEFAULT_SHOW_PEAK_METER: false,
 
-        // Default setting for the grid ('Spectrum' mode)
+        // Should the grid and frequency labels (Hz) be shown in 'Spectrum' mode?
+        // Valid options: true, false
         DEFAULT_SHOW_SPECTRUM_GRID: false,
         
-        // Default setting for the grid ('Bars', 'LED' modes)
+        // Should the background grid be shown in 'Bars' and 'LED' mode?
+        // Valid options: true, false
         DEFAULT_SHOW_BARS_GRID: false,
 
-        // Default setting for the grid ('Waveform' mode)
+        // Should the background grid be shown in 'Waveform' mode?
+        // Valid options: true, false
         DEFAULT_SHOW_WAVEFORM_GRID: false,
 
-        // Default "Neon Glow" size for 'Waveform' mode.
-        // Options: 0 (off), 1-10 (glow size)
-        DEFAULT_WAVEFORM_GLOW: 0
+        // Default "Neon Glow" effect for 'Waveform' mode.
+        // Recommended to be 0 for best performance, especially on mobile devices.
+        // Valid options: 0 (off), 1-10 (glow intensity)
+        DEFAULT_WAVEFORM_GLOW: 0,
+
+
+        // ===================================================================================
+        // SECTION C: ADVANCED SENSITIVITY BASE-TUNING
+        // ===================================================================================
+        // Because the audio source level can vary greatly between different servers, you can
+        // pre-adjust a "base sensitivity" for specific modes here. These values act as a 
+        // multiplier on top of the user's own sensitivity slider.
+        // A value of 1.0 is neutral (no change). 2.0 provides double the visual output.
+		
+        // Boosts the 'Waveform' mode, which often appears weaker than other modes.
+        // Recommended value: between 0.1 and 2.5
+		WAVEFORM_SENSITIVITY_BOOST: 0.5, 
+
+        // Boosts the 'Circle' mode for a more distinct pulse effect.
+        // Recommended value: between 0.1 and 1.8
+        CIRCLE_SENSITIVITY_BOOST: 0.5
     };
 	
 
@@ -63,6 +93,7 @@
 
     // --- General Layout ---
     const MOBILE_BREAKPOINT = 769; // The screen width (in pixels) below which the plugin will deactivate.
+	const PLUGIN_LOAD_DELAY = 1000; // Milliseconds to wait after the page is fully loaded before starting the plugin.
   
 	// --- Row Scaling and Positioning (Reimplemented & Expanded) ---
 	const TP_ROW_SCALE = '0.6';          // The size scale of the TP/TA row (top).
@@ -117,7 +148,6 @@
 	// --- Circle Mode Specific (3-Panel Layout) ---
 	const CIRCLE_PANEL_RADIUS = 5;      // The inner radius of each of the three circles. Default: 35
 	const CIRCLE_PANEL_LINE_WIDTH = 2;   // The thickness of the pulsating lines. Default: 2
-	const CIRCLE_PANEL_BAR_LENGTH = 8; // Multiplier for the length of the pulsating lines. 1.0 is normal, 1.5 is 50% longer. Default: 1.2
 	const CIRCLE_PEAK_LINE_WIDTH = 0.6;  // The thickness of the peak meter arc. Default: 0.6
 	const CIRCLE_PEAK_ARC_SIZE = 0.03;   // The length of the peak meter arc (in radians). Default: 0.03
 
@@ -179,7 +209,7 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.6.2';
+    const PLUGIN_VERSION = 'v1.6.3';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
@@ -196,18 +226,12 @@
     let currentVisualizerMode = 'Bars';
     let showSpectrumGrid = true;
     let isEqLayoutActive = false;
-    let originalFlagsContainerRef = null;
     let settingsButtonRef = null;
     let currentThemeIndex = 0;
 	let showWaveformGrid = true;
 	let waveformDuration = WAVEFORM_DURATION_DEFAULT;
 	let isWaveformStereo = true;
-	let smoothedTimeData = null;
-    let ptyElementRef = null;
-    let flagsElementRef = null;
     let visualEqContainerRef = null;
-	let lastWaveformY = null;
-	let waveformHistory = [];
 	let cachedFillStyle = null;
 	let cachedLedColors = []; 
 	let cachedLedPeakColor = '';
@@ -228,9 +252,16 @@
     // ────────────────────────────────────────────────────────────
     // INITIALISERING
     // ────────────────────────────────────────────────────────────
-    document.addEventListener("DOMContentLoaded", () => {
+    window.addEventListener("load", () => {
+        // Vent til vinduet er under mobil-breakpointet
         if (window.innerWidth < MOBILE_BREAKPOINT) return;
-        setTimeout(setupPlugin, 500);
+
+        // Kjør setupPlugin ETTER en definert forsinkelse.
+        // Dette gir andre plugins og sidens kjernefunksjonalitet god tid til å bli ferdig,
+        // og reduserer sjansen for lasting-konflikter.
+        setTimeout(setupPlugin, PLUGIN_LOAD_DELAY);
+
+        // Resize-lytteren kan settes opp umiddelbart
         setupResizeListener();
     });
 
@@ -1154,13 +1185,40 @@ function compareVersions(v1, v2) {
   // ────────────────────────────────────────────────────────────
   // EQUALIZER-LOGIKK
   // ────────────────────────────────────────────────────────────
-  function showStandbyText() {
+  
+function drawVersionText() {
     if (!eqCtx || !eqCanvas) return;
-    eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
+
     let textColor = getComputedStyle(document.documentElement).getPropertyValue('--regular-text-color').trim() || 'white';
-    Object.assign(eqCtx, { fillStyle: textColor, font: "16px Arial", textAlign: "center", textBaseline: "middle" });
+    
+    eqCtx.save(); 
+    eqCtx.fillStyle = textColor;
+    eqCtx.globalAlpha = 0.5; 
+    eqCtx.font = "10px Arial";
+    eqCtx.textAlign = "left";
+    eqCtx.textBaseline = "top";
+    eqCtx.fillText(`VisualEQ ${PLUGIN_VERSION}`, 5, 5);
+    eqCtx.restore(); 
+}
+
+function showStandbyText() {
+    if (!eqCtx || !eqCanvas) return;
+
+    eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
+
+    drawVersionText();
+
+    let textColor = getComputedStyle(document.documentElement).getPropertyValue('--regular-text-color').trim() || 'white';
+
+    eqCtx.fillStyle = textColor;
+    eqCtx.font = "16px Arial";
+    eqCtx.textAlign = "center";
+    eqCtx.textBaseline = "middle";
     eqCtx.fillText("Standby", eqCanvas.width / 2, eqCanvas.height / 2);
-  }
+
+    eqCtx.font = "12px Arial";
+    eqCtx.fillText("No active audio stream", eqCanvas.width / 2, eqCanvas.height / 2 + 22);
+}
 
 function startOrRestartEQ() {
     if (animationFrameId) cancelAnimationFrame(animationFrameId);
@@ -1198,6 +1256,18 @@ function startOrRestartEQ() {
     }
     
 	updateCachedStyles();
+
+    if (['Bars', 'LED'].includes(currentVisualizerMode)) {
+        drawBarsGridToBuffer();
+    } else if (currentVisualizerMode === 'Waveform') {
+        drawWaveformGrid();
+		showStandbyText();
+    } else {
+        if (gridCtx && gridCanvas) {
+            gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+        }
+    }
+
     lastFrameTime = performance.now();
     animationFrameId = requestAnimationFrame(drawEQ);
 }
@@ -1342,7 +1412,7 @@ function drawEQ(currentTime) {
                 updateBarHeights(bandLevels, TARGET_INTERVAL / 1000);
             }
         }
-		else { 
+		else {
             if (analyserLeft && analyserRight) {
                 analyserLeft.getByteTimeDomainData(dataArrayLeft);
                 analyserRight.getByteTimeDomainData(dataArrayRight);
@@ -1350,8 +1420,7 @@ function drawEQ(currentTime) {
                 const centerY = eqCanvas.height / 2;
                 let newY;
 
-                const waveformSensitivityMultiplier = 0.6; 
-                const effectiveSensitivity = SENSITIVITY * waveformSensitivityMultiplier;
+                const effectiveSensitivity = SENSITIVITY * SERVER_OWNER_DEFAULTS.WAVEFORM_SENSITIVITY_BOOST;
 
                 if (isWaveformStereo) {
                     const leftSample = dataArrayLeft[Math.floor(dataArrayLeft.length / 2)];
@@ -1376,6 +1445,7 @@ function drawEQ(currentTime) {
 
     eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
 
+
     switch (currentVisualizerMode) {
         case 'LED':
             drawModeLed();
@@ -1399,36 +1469,6 @@ function drawEQ(currentTime) {
     }
     
     animationFrameId = requestAnimationFrame(drawEQ);
-}
-
-function drawBarsGrid() {
-    eqCtx.save();
-
-    eqCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    eqCtx.lineWidth = 0.5;
-    eqCtx.setLineDash([4, 4]);
-
-    for (let i = 1; i <= 3; i++) {
-        const y = eqCanvas.height * (i * 0.25);
-        eqCtx.beginPath();
-        eqCtx.moveTo(0, y);
-        eqCtx.lineTo(eqCanvas.width, y);
-        eqCtx.stroke();
-    }
-
-    eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    eqCtx.font = '10px Arial';
-    eqCtx.setLineDash([]);
-    eqCtx.textAlign = 'left';
-    eqCtx.textBaseline = 'bottom';
-
-    for (let i = 1; i <= 3; i++) {
-        const y = eqCanvas.height * (i * 0.25);
-        const text = `${100 - (i * 25)}%`;
-        eqCtx.fillText(text, 5, y - 2);
-    }
-    
-    eqCtx.restore();
 }
 
 function drawBarsGridToBuffer() {
@@ -1723,8 +1763,8 @@ function drawModeCircle() {
 
     const bandsPerPanel = numBars / 3;
 
-    const panelWidth = eqCanvas.width / 3;
-    const panelCenterY = eqCanvas.height / 2 - 5; 
+    const panelWidth = eqCtx.canvas.width / 3;
+    const panelCenterY = eqCtx.canvas.height / 2 - 5; 
     const panelPositions = [
         { x: panelWidth * 0.5, y: panelCenterY, label: "Bass" },
         { x: panelWidth * 1.5, y: panelCenterY, label: "Midrange" },
@@ -1736,11 +1776,11 @@ function drawModeCircle() {
     eqCtx.lineWidth = 1;
     eqCtx.beginPath();
     eqCtx.moveTo(panelWidth, 10);
-    eqCtx.lineTo(panelWidth, eqCanvas.height - 10);
+    eqCtx.lineTo(panelWidth, eqCtx.canvas.height - 10);
     eqCtx.stroke();
     eqCtx.beginPath();
     eqCtx.moveTo(panelWidth * 2, 10);
-    eqCtx.lineTo(panelWidth * 2, eqCanvas.height - 10);
+    eqCtx.lineTo(panelWidth * 2, eqCtx.canvas.height - 10);
     eqCtx.stroke();
     eqCtx.fillStyle = 'rgba(255, 255, 255, 0.6)';
     const finalFontSize = CIRCLE_LABEL_BASE_FONT_SIZE * CIRCLE_LABEL_SCALE;
@@ -1748,42 +1788,48 @@ function drawModeCircle() {
     eqCtx.textAlign = 'center';
     eqCtx.textBaseline = 'bottom';
     panelPositions.forEach(panel => {
-        eqCtx.fillText(panel.label, panel.x, eqCanvas.height - CIRCLE_LABEL_BOTTOM_OFFSET); 
+        eqCtx.fillText(panel.label, panel.x, eqCtx.canvas.height - CIRCLE_LABEL_BOTTOM_OFFSET); 
     });
     eqCtx.restore();
 
     const drawPanel = (panel, color, peakColor, startIndex) => {
+        const boost = SERVER_OWNER_DEFAULTS.CIRCLE_SENSITIVITY_BOOST;
+
         eqCtx.strokeStyle = color;
-        
+        eqCtx.lineWidth = CIRCLE_PANEL_LINE_WIDTH;
+        eqCtx.beginPath(); 
+
         for (let i = 0; i < bandsPerPanel; i++) {
             const barIndex = startIndex + i;
-            const barLength = currentBarHeights[barIndex] || 0;
-            const angle = (i / bandsPerPanel) * 2 * Math.PI - (Math.PI / 2);
-
+            const barLength = (currentBarHeights[barIndex] || 0) * boost;
             if (barLength > 0) {
+                const angle = (i / bandsPerPanel) * 2 * Math.PI - (Math.PI / 2);
                 const x1 = panel.x + CIRCLE_PANEL_RADIUS * Math.cos(angle);
                 const y1 = panel.y + CIRCLE_PANEL_RADIUS * Math.sin(angle);
                 const x2 = panel.x + (CIRCLE_PANEL_RADIUS + barLength) * Math.cos(angle);
                 const y2 = panel.y + (CIRCLE_PANEL_RADIUS + barLength) * Math.sin(angle);
-
-                eqCtx.beginPath();
                 eqCtx.moveTo(x1, y1);
                 eqCtx.lineTo(x2, y2);
-                eqCtx.lineWidth = CIRCLE_PANEL_LINE_WIDTH;
-                eqCtx.stroke();
             }
+        }
+        eqCtx.stroke();
 
-            if (showPeakMeter) {
-                const peakLength = peakHeights[barIndex] || 0;
+        if (showPeakMeter) {
+            eqCtx.strokeStyle = peakColor;
+            eqCtx.lineWidth = CIRCLE_PEAK_LINE_WIDTH;
+
+            for (let i = 0; i < bandsPerPanel; i++) {
+                const barIndex = startIndex + i;
+                const peakLength = (peakHeights[barIndex] || 0) * boost;
+
                 if (peakLength > 0) {
+                    const angle = (i / bandsPerPanel) * 2 * Math.PI - (Math.PI / 2);
                     const peakRadius = CIRCLE_PANEL_RADIUS + peakLength;
                     const startAngle = angle - CIRCLE_PEAK_ARC_SIZE / 2;
                     const endAngle = angle + CIRCLE_PEAK_ARC_SIZE / 2;
-
-                    eqCtx.strokeStyle = peakColor; 
+                    
                     eqCtx.beginPath();
                     eqCtx.arc(panel.x, panel.y, peakRadius, startAngle, endAngle);
-                    eqCtx.lineWidth = CIRCLE_PEAK_LINE_WIDTH;
                     eqCtx.stroke();
                 }
             }
@@ -1834,30 +1880,29 @@ setInterval(() => {
         return; 
     }
 
-    if (currentFftSize === FFT_SIZES.OFF) {
-        return;
-    }
 
-    if (animationFrameId !== null) {
-        if (!Stream || !Stream.Fallback || !Stream.Fallback.Audio || Stream.Fallback.Audio.state !== 'running') {
+    const isStreamRunning = Stream && Stream.Fallback && Stream.Fallback.Audio && Stream.Fallback.Audio.state === 'running';
+
+    if (isStreamRunning) {
+        if (animationFrameId === null) {
+            console.log("VisualEQ Watchdog: Audio stream is active. Starting visualizer.");
+            if (!isEqLayoutActive) {
+                setupVisualEQLayout();
+            } else {
+                startOrRestartEQ();
+            }
+        }
+    } else {
+        if (animationFrameId !== null) {
+            console.log("VisualEQ Watchdog: Audio stream stopped. Resetting.");
             if (animationFrameId) cancelAnimationFrame(animationFrameId);
             animationFrameId = null;
-            analyser = null;
             if (isEqLayoutActive) showStandbyText();
-            console.log("VisualEQ Watchdog: Audio stream stopped. Resetting.");
+        } 
+        else if (isEqLayoutActive) {
+            showStandbyText();
         }
-        return;
     }
 
-    if (Stream && Stream.Fallback && Stream.Fallback.Audio && Stream.Fallback.Audio.state === 'running') {
-        console.log("VisualEQ Watchdog: Audio stream is active. Starting visualizer.");
-        if (!isEqLayoutActive) {
-            setupVisualEQLayout();
-        } else {
-            startOrRestartEQ();
-        }
-    }
 }, 1000);
 })();
-
-
