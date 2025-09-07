@@ -6,7 +6,7 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.6.3 :: CONFIGURATION
+    // VisualEQ v1.6.4 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
@@ -41,19 +41,19 @@
         // Should the "Peak Meter" (the top-most line/dot) be shown by default?
         // Applies to modes: 'Bars', 'LED', 'Circle', 'Mirrored Bars'.
         // Valid options: true, false
-        DEFAULT_SHOW_PEAK_METER: false,
+        DEFAULT_SHOW_PEAK_METER: true,
 
         // Should the grid and frequency labels (Hz) be shown in 'Spectrum' mode?
         // Valid options: true, false
-        DEFAULT_SHOW_SPECTRUM_GRID: false,
+        DEFAULT_SHOW_SPECTRUM_GRID: true,
         
         // Should the background grid be shown in 'Bars' and 'LED' mode?
         // Valid options: true, false
-        DEFAULT_SHOW_BARS_GRID: false,
+        DEFAULT_SHOW_BARS_GRID: true,
 
         // Should the background grid be shown in 'Waveform' mode?
         // Valid options: true, false
-        DEFAULT_SHOW_WAVEFORM_GRID: false,
+        DEFAULT_SHOW_WAVEFORM_GRID: true,
 
         // Default "Neon Glow" effect for 'Waveform' mode.
         // Recommended to be 0 for best performance, especially on mobile devices.
@@ -209,7 +209,7 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.6.3';
+    const PLUGIN_VERSION = 'v1.6.4';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
@@ -344,8 +344,8 @@ function setupPlugin() {
             setupVisualEQLayout();
         }, 3000);
 
-        const observer = new MutationObserver((mutations, obs) => {
-            const logoElement = document.getElementById('logo-container-desktop');
+		const observer = new MutationObserver((mutations, obs) => {
+            const logoElement = document.getElementById('logo-container-desktop') || document.getElementById('logo-container');
             if (logoElement) {
                 console.log('VisualEQ: Logo detected. Building final layout.');
                 clearTimeout(timeout);
@@ -405,7 +405,8 @@ function setupVisualEQLayout() {
     const psContainer = document.getElementById('ps-container');
     const flagsContainer = document.getElementById('flags-container-desktop');
     const playButtonBlock = document.querySelector('.playbutton')?.closest('div[class*="panel-10"]');
-    const logoBlock = document.getElementById('logo-container-desktop')?.closest('.panel-30');
+    const logoContainer = document.getElementById('logo-container-desktop') || document.getElementById('logo-container');
+    const logoBlock = logoContainer?.closest('div[class*="panel-"]');
     const mainParentContainer = flagsContainer.parentNode;
 
     if (!psContainer || !flagsContainer || !playButtonBlock || !mainParentContainer) {
