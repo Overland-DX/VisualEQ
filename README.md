@@ -1,6 +1,6 @@
 # VisualEQ for fm-dx-webserver
 
-![Version](https://img.shields.io/badge/version-1.6.2-blue)
+![Version](https://img.shields.io/badge/version-1.6.3-blue)
 ![Compatibility](https://img.shields.io/badge/fm--dx--webserver-v1.3.9-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
