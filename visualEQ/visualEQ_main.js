@@ -25,6 +25,10 @@
         // Valid options: true, false
         DEFAULT_PLUGIN_ENABLED: true,
 
+		// Should the settings button be hidden by default?
+        // Valid options: true, false
+        DEFAULT_DISABLE_SETTINGS: false,
+
         // Default theme for the visualizer.
         // IMPORTANT: The name must exactly match a theme name from the 'EQ_THEMES' list below.
         DEFAULT_THEME_NAME: 'Server Themecolor',
@@ -284,6 +288,9 @@
     // ────────────────────────────────────────────────────────────
 
 function saveSettingForMode(mode, key, value) {
+    if (SERVER_OWNER_DEFAULTS.DEFAULT_DISABLE_SETTINGS) {
+        return;
+    }
     localStorage.setItem(`visualeq_${mode}_${key}`, value);
 }
 
@@ -305,20 +312,37 @@ function setupPlugin() {
         return;
     }
 
-    const storedMode = localStorage.getItem('visualeqMode');
-    currentVisualizerMode = storedMode !== null ? storedMode : SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
-    
-    currentThemeIndex = parseInt(loadSettingForMode(currentVisualizerMode, 'themeIndex', DEFAULT_THEME_INDEX), 10);
-    SENSITIVITY = parseFloat(loadSettingForMode(currentVisualizerMode, 'sensitivity', SENSITIVITY_DEFAULT));
-    
-    showPeakMeter = (String(loadSettingForMode(currentVisualizerMode, 'showPeak', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER)) === 'true');
-    showSpectrumGrid = (String(loadSettingForMode(currentVisualizerMode, 'showGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID)) === 'true');
-    showBarsGrid = (String(loadSettingForMode(currentVisualizerMode, 'showBarsGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID)) === 'true');
-    isWaveformStereo = (String(loadSettingForMode(currentVisualizerMode, 'waveformStereo', true)) === 'true');
-    showWaveformGrid = (String(loadSettingForMode(currentVisualizerMode, 'waveformGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID)) === 'true');
-    
-    waveformDuration = parseFloat(loadSettingForMode(currentVisualizerMode, 'waveformDuration', WAVEFORM_DURATION_DEFAULT));
-    waveformGlowSize = parseInt(loadSettingForMode(currentVisualizerMode, 'waveformGlow', SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW), 10);
+    const disableSettings = SERVER_OWNER_DEFAULTS.DEFAULT_DISABLE_SETTINGS;
+
+    if (disableSettings) {
+        currentVisualizerMode = SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
+        currentThemeIndex = DEFAULT_THEME_INDEX;
+        SENSITIVITY = SENSITIVITY_DEFAULT;
+        
+        showPeakMeter = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER;
+        showSpectrumGrid = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID;
+        showBarsGrid = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID;
+        isWaveformStereo = true;
+        showWaveformGrid = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID;
+        
+        waveformDuration = WAVEFORM_DURATION_DEFAULT;
+        waveformGlowSize = SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW;
+    } else {
+        const storedMode = localStorage.getItem('visualeqMode');
+        currentVisualizerMode = storedMode !== null ? storedMode : SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
+        
+        currentThemeIndex = parseInt(loadSettingForMode(currentVisualizerMode, 'themeIndex', DEFAULT_THEME_INDEX), 10);
+        SENSITIVITY = parseFloat(loadSettingForMode(currentVisualizerMode, 'sensitivity', SENSITIVITY_DEFAULT));
+        
+        showPeakMeter = (String(loadSettingForMode(currentVisualizerMode, 'showPeak', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER)) === 'true');
+        showSpectrumGrid = (String(loadSettingForMode(currentVisualizerMode, 'showGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID)) === 'true');
+        showBarsGrid = (String(loadSettingForMode(currentVisualizerMode, 'showBarsGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID)) === 'true');
+        isWaveformStereo = (String(loadSettingForMode(currentVisualizerMode, 'waveformStereo', true)) === 'true');
+        showWaveformGrid = (String(loadSettingForMode(currentVisualizerMode, 'waveformGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID)) === 'true');
+        
+        waveformDuration = parseFloat(loadSettingForMode(currentVisualizerMode, 'waveformDuration', WAVEFORM_DURATION_DEFAULT));
+        waveformGlowSize = parseInt(loadSettingForMode(currentVisualizerMode, 'waveformGlow', SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW), 10);
+    }
 
     const storedFftSize = localStorage.getItem('visualeqFftSize');
     currentFftSize = storedFftSize !== null ? parseInt(storedFftSize, 10) : FFT_SIZES.Medium;
@@ -328,10 +352,15 @@ function setupPlugin() {
     }
 
     injectPluginStyles();
-    settingsButtonRef = createSettingsButton();
-    createSettingsModal();
-	
-	gridCanvas = document.createElement('canvas');
+
+    if (!disableSettings) {
+        settingsButtonRef = createSettingsButton();
+        createSettingsModal();
+    } else {
+        settingsButtonRef = document.createElement('div');
+    }
+
+    gridCanvas = document.createElement('canvas');
     gridCtx = gridCanvas.getContext('2d');
 
     const initialY = { top: 0, bottom: 0 };
@@ -344,7 +373,7 @@ function setupPlugin() {
             setupVisualEQLayout();
         }, 3000);
 
-		const observer = new MutationObserver((mutations, obs) => {
+        const observer = new MutationObserver((mutations, obs) => {
             const logoElement = document.getElementById('logo-container-desktop') || document.getElementById('logo-container');
             if (logoElement) {
                 console.log('VisualEQ: Logo detected. Building final layout.');
@@ -386,15 +415,22 @@ function addVisualEQToggle() {
 
     anchorElement.closest('.form-group').insertAdjacentElement("afterend", wrapper);
 
-    const storedState = localStorage.getItem('visualeqEnabled');
-    const isEnabled = storedState === null ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED : (storedState !== 'false');
+    let isEnabled;
+    if (SERVER_OWNER_DEFAULTS.DEFAULT_DISABLE_SETTINGS) {
+        isEnabled = SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED;
+    } else {
+        const storedState = localStorage.getItem('visualeqEnabled');
+        isEnabled = storedState === null ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED : (storedState !== 'false');
+    }
 
     document.getElementById(id).checked = !isEnabled;
 
     document.getElementById(id).addEventListener("change", function () {
-		
         const shouldBeEnabled = !this.checked;
-        localStorage.setItem("visualeqEnabled", shouldBeEnabled);
+
+        if (!SERVER_OWNER_DEFAULTS.DEFAULT_DISABLE_SETTINGS) {
+            localStorage.setItem("visualeqEnabled", shouldBeEnabled);
+        }
         window.location.reload();
     });
 }
@@ -1907,3 +1943,4 @@ setInterval(() => {
 
 }, 1000);
 })();
+
