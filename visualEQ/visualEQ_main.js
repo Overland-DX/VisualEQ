@@ -583,6 +583,7 @@ function injectPluginStyles() {
     pluginStyles.id = 'visualeq-plugin-styles';
     pluginStyles.innerHTML = `
       .visualeq-tooltip-text {
+          top: 0;
           position: absolute;
           background-color: var(--color-2);
           border: 2px solid var(--color-3);
