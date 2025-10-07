@@ -1,7 +1,7 @@
 # VisualEQ for fm-dx-webserver
 
-![Version](https://img.shields.io/badge/version-1.6.4-blue)
-![Compatibility](https://img.shields.io/badge/fm--dx--webserver-v1.3.9-brightgreen)
+![Version](https://img.shields.io/badge/version-1.6.5-blue)
+![Compatibility](https://img.shields.io/badge/fm--dx--webserver-v1.3.11-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 A feature-rich audio visualizer and UI enhancement plugin for the fm-dx webserver. VisualEQ replaces the standard flags container with a dynamic audio visualizer, offering six distinct modes, deep customization, and per-mode profiles to create your perfect listening experience.

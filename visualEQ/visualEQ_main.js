@@ -6,7 +6,7 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.6.4 :: CONFIGURATION
+    // VisualEQ v1.6.5 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
@@ -75,11 +75,11 @@
 		
         // Boosts the 'Waveform' mode, which often appears weaker than other modes.
         // Recommended value: between 0.1 and 2.5
-		WAVEFORM_SENSITIVITY_BOOST: 0.5, 
+		WAVEFORM_SENSITIVITY_BOOST: 1.0, 
 
         // Boosts the 'Circle' mode for a more distinct pulse effect.
         // Recommended value: between 0.1 and 1.8
-        CIRCLE_SENSITIVITY_BOOST: 0.5
+        CIRCLE_SENSITIVITY_BOOST: 1.0
     };
 	
 
@@ -144,7 +144,6 @@
 
 	// --- Waveform Mode Specific ---
 	const WAVEFORM_GLOW_DEFAULT = 0;   // The default "neon glow" size.
-	let waveformGlowSize = WAVEFORM_GLOW_DEFAULT; // This will now hold the current value.
 	const WAVEFORM_DURATION_DEFAULT = 5; // Default duration in seconds.
 	const WAVEFORM_DURATION_MIN = 2;     // Minimum duration for the slider.
 	const WAVEFORM_DURATION_MAX = 10;    // Maximum duration for the slider.
@@ -213,7 +212,7 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.6.4';
+    const PLUGIN_VERSION = 'v1.6.5';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
@@ -251,21 +250,18 @@
 	let latestBandLevels = [];
 	let cachedCircleColors = {};
 	let showBarsGrid = true;
+	let waveformGlowSize = WAVEFORM_GLOW_DEFAULT; 
+	
 	
 
     // ────────────────────────────────────────────────────────────
     // INITIALISERING
     // ────────────────────────────────────────────────────────────
     window.addEventListener("load", () => {
-        // Vent til vinduet er under mobil-breakpointet
         if (window.innerWidth < MOBILE_BREAKPOINT) return;
 
-        // Kjør setupPlugin ETTER en definert forsinkelse.
-        // Dette gir andre plugins og sidens kjernefunksjonalitet god tid til å bli ferdig,
-        // og reduserer sjansen for lasting-konflikter.
         setTimeout(setupPlugin, PLUGIN_LOAD_DELAY);
 
-        // Resize-lytteren kan settes opp umiddelbart
         setupResizeListener();
     });
 
@@ -287,25 +283,56 @@
     // HOVEDOPPSETT
     // ────────────────────────────────────────────────────────────
 
-function saveSettingForMode(mode, key, value) {
+const SETTINGS_STORAGE_KEY = 'visualeq_settings';
+
+function loadAllSettings() {
+    try {
+        const settingsJson = localStorage.getItem(SETTINGS_STORAGE_KEY);
+        return settingsJson ? JSON.parse(settingsJson) : { global: {}, modes: {} };
+    } catch (e) {
+        console.error("VisualEQ: Kunne ikke parse lagrede innstillinger.", e);
+        return { global: {}, modes: {} };
+    }
+}
+
+function saveAllSettings(settings) {
     if (SERVER_OWNER_DEFAULTS.DEFAULT_DISABLE_SETTINGS) {
         return;
     }
-    localStorage.setItem(`visualeq_${mode}_${key}`, value);
+    try {
+        localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch (e) {
+        console.error("VisualEQ: Kunne ikke lagre innstillinger.", e);
+    }
 }
 
-function loadSettingForMode(mode, key, defaultValue) {
-    const value = localStorage.getItem(`visualeq_${mode}_${key}`);
-    return value !== null ? value : defaultValue;
-}	
+function saveSettingForMode(mode, key, value) {
+    const settings = loadAllSettings();
+    
+    if (!settings.modes) settings.modes = {};
+    if (!settings.modes[mode]) settings.modes[mode] = {};
+
+    settings.modes[mode][key] = value;
+    saveAllSettings(settings);
+}
+
+function saveGlobalSetting(key, value) {
+    const settings = loadAllSettings();
+    if (!settings.global) settings.global = {};
+    
+    settings.global[key] = value;
+    saveAllSettings(settings);
+}
 
 function setupPlugin() {
     addVisualEQToggle();
 
-    const storedState = localStorage.getItem('visualeqEnabled');
-    const isEnabled = storedState === null ?
-        SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED :
-        (storedState !== 'false');
+    const VISIBILITY_STORAGE_KEY = 'visualeq_enabled_state';
+    const storedVisibility = localStorage.getItem(VISIBILITY_STORAGE_KEY);
+
+    const isEnabled = storedVisibility !== null
+        ? (storedVisibility === 'true')
+        : SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED;
 
     if (!isEnabled) {
         console.log("VisualEQ is disabled via side menu setting.");
@@ -313,42 +340,41 @@ function setupPlugin() {
     }
 
     const disableSettings = SERVER_OWNER_DEFAULTS.DEFAULT_DISABLE_SETTINGS;
+    const allSettings = loadAllSettings();
 
     if (disableSettings) {
         currentVisualizerMode = SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
         currentThemeIndex = DEFAULT_THEME_INDEX;
         SENSITIVITY = SENSITIVITY_DEFAULT;
-        
         showPeakMeter = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER;
         showSpectrumGrid = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID;
         showBarsGrid = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID;
         isWaveformStereo = true;
         showWaveformGrid = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID;
-        
         waveformDuration = WAVEFORM_DURATION_DEFAULT;
         waveformGlowSize = SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW;
+        currentFftSize = FFT_SIZES.Medium;
     } else {
-        const storedMode = localStorage.getItem('visualeqMode');
-        currentVisualizerMode = storedMode !== null ? storedMode : SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
+        currentVisualizerMode = allSettings.global?.lastMode ?? SERVER_OWNER_DEFAULTS.DEFAULT_VISUALIZER_MODE;
         
-        currentThemeIndex = parseInt(loadSettingForMode(currentVisualizerMode, 'themeIndex', DEFAULT_THEME_INDEX), 10);
-        SENSITIVITY = parseFloat(loadSettingForMode(currentVisualizerMode, 'sensitivity', SENSITIVITY_DEFAULT));
-        
-        showPeakMeter = (String(loadSettingForMode(currentVisualizerMode, 'showPeak', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER)) === 'true');
-        showSpectrumGrid = (String(loadSettingForMode(currentVisualizerMode, 'showGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID)) === 'true');
-        showBarsGrid = (String(loadSettingForMode(currentVisualizerMode, 'showBarsGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID)) === 'true');
-        isWaveformStereo = (String(loadSettingForMode(currentVisualizerMode, 'waveformStereo', true)) === 'true');
-        showWaveformGrid = (String(loadSettingForMode(currentVisualizerMode, 'waveformGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID)) === 'true');
-        
-        waveformDuration = parseFloat(loadSettingForMode(currentVisualizerMode, 'waveformDuration', WAVEFORM_DURATION_DEFAULT));
-        waveformGlowSize = parseInt(loadSettingForMode(currentVisualizerMode, 'waveformGlow', SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW), 10);
-    }
+        const modeSettings = allSettings.modes?.[currentVisualizerMode] || {};
 
-    const storedFftSize = localStorage.getItem('visualeqFftSize');
-    currentFftSize = storedFftSize !== null ? parseInt(storedFftSize, 10) : FFT_SIZES.Medium;
-    if (currentFftSize === 2048) {
-        currentFftSize = 4096;
-        localStorage.setItem('visualeqFftSize', currentFftSize);
+        currentThemeIndex = modeSettings.themeIndex ?? DEFAULT_THEME_INDEX;
+        SENSITIVITY = modeSettings.sensitivity ?? SENSITIVITY_DEFAULT;
+        showPeakMeter = modeSettings.showPeak ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER;
+        showSpectrumGrid = modeSettings.showGrid ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID;
+        showBarsGrid = modeSettings.showBarsGrid ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID;
+        isWaveformStereo = modeSettings.waveformStereo ?? true;
+        showWaveformGrid = modeSettings.waveformGrid ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID;
+        waveformDuration = modeSettings.waveformDuration ?? WAVEFORM_DURATION_DEFAULT;
+        waveformGlowSize = modeSettings.waveformGlow ?? SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW;
+
+        currentFftSize = allSettings.global?.fftSize ?? FFT_SIZES.Medium;
+        
+        if (currentFftSize === 2048) {
+            currentFftSize = 4096;
+            saveGlobalSetting('fftSize', currentFftSize);
+        }
     }
 
     injectPluginStyles();
@@ -390,11 +416,35 @@ function setupPlugin() {
     };
 
     waitForLogoAndInit();
+
+    setInterval(() => {
+        const isStreamRunning = Stream && Stream.Fallback && Stream.Fallback.Audio && Stream.Fallback.Audio.state === 'running';
+
+        if (isStreamRunning) {
+            if (animationFrameId === null) {
+                console.log("VisualEQ Watchdog: Audio stream is active. Starting visualizer.");
+                if (!isEqLayoutActive) {
+                    setupVisualEQLayout();
+                } else {
+                    startOrRestartEQ();
+                }
+            }
+        } else {
+            if (animationFrameId !== null) {
+                console.log("VisualEQ Watchdog: Audio stream stopped. Resetting.");
+                if (animationFrameId) cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+                if (isEqLayoutActive) showStandbyText();
+            } 
+            else if (isEqLayoutActive) {
+                showStandbyText();
+            }
+        }
+    }, 1000);
 }
 
 function addVisualEQToggle() {
     const anchorElement = document.getElementById("imperial-units");
-
     if (!anchorElement) {
         console.warn("VisualEQ: Could not find the 'imperial-units' anchor element.");
         return;
@@ -415,22 +465,20 @@ function addVisualEQToggle() {
 
     anchorElement.closest('.form-group').insertAdjacentElement("afterend", wrapper);
 
-    let isEnabled;
-    if (SERVER_OWNER_DEFAULTS.DEFAULT_DISABLE_SETTINGS) {
-        isEnabled = SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED;
-    } else {
-        const storedState = localStorage.getItem('visualeqEnabled');
-        isEnabled = storedState === null ? SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED : (storedState !== 'false');
-    }
+    const VISIBILITY_STORAGE_KEY = 'visualeq_enabled_state';
+    const storedVisibility = localStorage.getItem(VISIBILITY_STORAGE_KEY);
+    
+    const isEnabled = storedVisibility !== null
+        ? (storedVisibility === 'true')
+        : SERVER_OWNER_DEFAULTS.DEFAULT_PLUGIN_ENABLED;
 
     document.getElementById(id).checked = !isEnabled;
 
     document.getElementById(id).addEventListener("change", function () {
         const shouldBeEnabled = !this.checked;
 
-        if (!SERVER_OWNER_DEFAULTS.DEFAULT_DISABLE_SETTINGS) {
-            localStorage.setItem("visualeqEnabled", shouldBeEnabled);
-        }
+        localStorage.setItem(VISIBILITY_STORAGE_KEY, shouldBeEnabled);
+
         window.location.reload();
     });
 }
@@ -584,6 +632,7 @@ function injectPluginStyles() {
     pluginStyles.innerHTML = `
       .visualeq-tooltip-text {
           top: 0;
+          left: 0;
           position: absolute;
           background-color: var(--color-2);
           border: 2px solid var(--color-3);
@@ -636,7 +685,7 @@ function injectPluginStyles() {
           appearance: none; 
           width: 100%; 
           height: 14px; 
-          background: var(--color-2, #555); /* Standard bakgrunn, JS vil overstyre */
+          background: var(--color-2, #555);
           border-radius: 7px; 
           outline: none; 
           padding: 0; 
@@ -673,15 +722,15 @@ function injectPluginStyles() {
       /* Resten av stilene for modal-vinduet */
       .visualeq-modal-content { background: var(--color-1, #121010); color: var(--color-3, #FFF); border: 1px solid var(--color-2, #333); }
       .visualeq-modal-content .header { background: var(--color-2, #2A2A2A); padding: 10px 15px; border-bottom: 1px solid var(--color-2, #333); }
-      .visualeq-modal-content h2 { color: var(--color-4, #FFF); font-size: 1.5em; margin: 0; }
-      .visualeq-modal-content .header a { color: var(--color-4, #FFF); opacity: 0.6; }
-      .visualeq-modal-content select { width: 100%; padding: 0.8em; background: var(--color-2, #333); color: var(--color-3, #FFF); border: 1px solid var(--color-1, #444); border-radius: 4px; font-size: 1em; }
-      .visualeq-modal-content label { display: block; margin-bottom: 0.6em; font-weight: bold; color: var(--color-4, #E6C269); text-transform: uppercase; font-size: 0.9em; }
-      .visualeq-modal-content .help-section hr { border: none; border-top: 1px solid var(--color-2, #444); opacity: 0.8; margin: 2em 0; }
-      .visualeq-modal-content .help-section p { color: var(--color-3, #FFF); opacity: 0.8; }
-      #fmdx-modal-close-visualeq { background: var(--color-2, rgba(255,255,255,0.1)); color: var(--color-3, #FFF); transition: background-color 0.2s, transform 0.2s; }
-      #fmdx-modal-close-visualeq:hover { background: var(--color-4, #E6C269); color: var(--color-1, #111); transform: rotate(90deg); }
-      .visualeq-checkbox-container { display: flex; align-items: center; justify-content: space-between; margin-top: 1.5em; padding: 0.8em; background-color: var(--color-2, #2A2A2A); border-radius: 4px; border: 1px solid var(--color-1, #444); }
+      .visualeq-modal-content h2 { color: var(--color-5, #FFF); font-size: 2em; margin: 0; }
+      .visualeq-modal-content .header a { color: var(--color-5, #FFF); opacity: 2; }
+      .visualeq-modal-content select { width: 100%; padding: 0.8em; background: var(--color-2, #333); color: var(--color-5, #FFF); border: 1px solid var(--color-1, #444); border-radius: 12px; font-size: 1em; }
+      .visualeq-modal-content label { display: block; margin-bottom: 0.6em; font-weight: bold; color: var(--color-5, #E6C269); text-transform: uppercase; font-size: 0.9em; }
+      .visualeq-modal-content .help-section hr { border: none; border-top: 1px solid var(--color-4, #444); opacity: 1.5; margin: 2em 0; }
+      .visualeq-modal-content .help-section p { color: var(--color-5, #FFF); opacity: 2; }
+      #fmdx-modal-close-visualeq { background: var(--color-4, rgba(255,255,255,0.1)); color: var(--color-1, #FFF); transition: background-color 0.2s, transform 0.2s; }
+      #fmdx-modal-close-visualeq:hover { background: var(--color-5, #E6C269); color: var(--color-1, #111); transform: rotate(90deg); }
+      .visualeq-checkbox-container { display: flex; align-items: center; justify-content: space-between; margin-top: 1.5em; padding: 0.8em; background-color: var(--color-2, #2A2A2A); border-radius: 12px; border: 1px solid var(--color-1, #444); }
       .visualeq-checkbox-container label { color: var(--color-4, #E6C269); text-transform: uppercase; font-size: 0.9em; margin-bottom: 0; }
       .visualeq-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
       .visualeq-switch input { display: none; }
@@ -704,7 +753,7 @@ function injectPluginStyles() {
 function createSettingsButton() {
     const wrapper = document.createElement('div');
     forceStyle(wrapper, {
-        position: 'absolute', top: '5px', right: '5px', zIndex: '10',
+        position: 'absolute', top: '-4px', right: '10px', zIndex: '10',
         cursor: 'pointer', width: '30px', height: '30px'
     });
 
@@ -714,8 +763,8 @@ function createSettingsButton() {
     settingsButton.innerHTML = '⚙️';
     forceStyle(settingsButton, {
         background: 'rgba(0,0,0,0.5)', border: `1px solid ${borderColor}`, color: 'white',
-        borderRadius: '50%', cursor: 'pointer', width: '24px', height: '24px',
-        fontSize: '16px', lineHeight: '22px', padding: '0', textAlign: 'center',
+        borderRadius: '50%', cursor: 'pointer', width: '40px', height: '40px',
+        fontSize: '28px', lineHeight: '22px', padding: '0', textAlign: 'center',
         transform: `scale(${SETTINGS_BUTTON_SCALE})`, opacity: '0', transition: 'opacity 0.2s ease-in-out'
     });
 
@@ -989,19 +1038,20 @@ function createSettingsModal() {
 
     const handleModeChange = (selectedMode) => {
         currentVisualizerMode = selectedMode;
-        localStorage.setItem('visualeqMode', currentVisualizerMode);
+        saveGlobalSetting('lastMode', currentVisualizerMode); 
 
-        currentThemeIndex = parseInt(loadSettingForMode(selectedMode, 'themeIndex', DEFAULT_THEME_INDEX), 10);
-        SENSITIVITY = parseFloat(loadSettingForMode(selectedMode, 'sensitivity', SENSITIVITY_DEFAULT));
-        
-        showPeakMeter = (String(loadSettingForMode(selectedMode, 'showPeak', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER)) === 'true');
-        showSpectrumGrid = (String(loadSettingForMode(selectedMode, 'showGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID)) === 'true');
-        showBarsGrid = (String(loadSettingForMode(selectedMode, 'showBarsGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID)) === 'true');
-        isWaveformStereo = (String(loadSettingForMode(selectedMode, 'waveformStereo', true)) === 'true');
-        showWaveformGrid = (String(loadSettingForMode(selectedMode, 'waveformGrid', SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID)) === 'true');
+        const allSettings = loadAllSettings();
+        const modeSettings = allSettings.modes?.[selectedMode] || {};
 
-        waveformDuration = parseFloat(loadSettingForMode(selectedMode, 'waveformDuration', WAVEFORM_DURATION_DEFAULT));
-        waveformGlowSize = parseInt(loadSettingForMode(selectedMode, 'waveformGlow', SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW), 10);
+        currentThemeIndex = modeSettings.themeIndex ?? DEFAULT_THEME_INDEX;
+        SENSITIVITY = modeSettings.sensitivity ?? SENSITIVITY_DEFAULT;
+        showPeakMeter = modeSettings.showPeak ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_PEAK_METER;
+        showSpectrumGrid = modeSettings.showGrid ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_SPECTRUM_GRID;
+        showBarsGrid = modeSettings.showBarsGrid ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_BARS_GRID;
+        isWaveformStereo = modeSettings.waveformStereo ?? true;
+        showWaveformGrid = modeSettings.waveformGrid ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID;
+        waveformDuration = modeSettings.waveformDuration ?? WAVEFORM_DURATION_DEFAULT;
+        waveformGlowSize = modeSettings.waveformGlow ?? SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW;
         
         updateModalUI();
         updateCachedStyles();
@@ -1092,7 +1142,7 @@ function createSettingsModal() {
     };
     waveformStereoContainer.querySelector('input').onchange = (e) => { isWaveformStereo = e.target.checked; saveSettingForMode(currentVisualizerMode, 'waveformStereo', isWaveformStereo); };
     waveformGridContainer.querySelector('input').onchange = (e) => { showWaveformGrid = e.target.checked; saveSettingForMode(currentVisualizerMode, 'waveformGrid', showWaveformGrid); drawWaveformGrid(); };
-    qualitySelect.onchange = () => { const newFftSize = parseInt(qualitySelect.value, 10); localStorage.setItem('visualeqFftSize', newFftSize); currentFftSize = newFftSize; startOrRestartEQ(); };
+    qualitySelect.onchange = () => { const newFftSize = parseInt(qualitySelect.value, 10); saveGlobalSetting('fftSize', newFftSize); currentFftSize = newFftSize; startOrRestartEQ(); };
 
     const createControlSection = (label, controlElement, marginTop = '0') => {
         const container = document.createElement('div');
@@ -1912,36 +1962,4 @@ function drawModeMirroredBars() {
     }
 }
 
-setInterval(() => {
-    const isEnabled = localStorage.getItem('visualeqEnabled') !== 'false';
-    if (!isEnabled) {
-        return; 
-    }
-
-
-    const isStreamRunning = Stream && Stream.Fallback && Stream.Fallback.Audio && Stream.Fallback.Audio.state === 'running';
-
-    if (isStreamRunning) {
-        if (animationFrameId === null) {
-            console.log("VisualEQ Watchdog: Audio stream is active. Starting visualizer.");
-            if (!isEqLayoutActive) {
-                setupVisualEQLayout();
-            } else {
-                startOrRestartEQ();
-            }
-        }
-    } else {
-        if (animationFrameId !== null) {
-            console.log("VisualEQ Watchdog: Audio stream stopped. Resetting.");
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
-            animationFrameId = null;
-            if (isEqLayoutActive) showStandbyText();
-        } 
-        else if (isEqLayoutActive) {
-            showStandbyText();
-        }
-    }
-
-}, 1000);
 })();
-
