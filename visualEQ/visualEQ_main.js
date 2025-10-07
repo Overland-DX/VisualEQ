@@ -6,7 +6,7 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.6.5 :: CONFIGURATION
+    // VisualEQ v1.6.6 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
@@ -75,11 +75,11 @@
 		
         // Boosts the 'Waveform' mode, which often appears weaker than other modes.
         // Recommended value: between 0.1 and 2.5
-		WAVEFORM_SENSITIVITY_BOOST: 1.0, 
+		WAVEFORM_SENSITIVITY_BOOST: 0.8, 
 
         // Boosts the 'Circle' mode for a more distinct pulse effect.
         // Recommended value: between 0.1 and 1.8
-        CIRCLE_SENSITIVITY_BOOST: 1.0
+        CIRCLE_SENSITIVITY_BOOST: 0.6
     };
 	
 
@@ -151,8 +151,8 @@
 	// --- Circle Mode Specific (3-Panel Layout) ---
 	const CIRCLE_PANEL_RADIUS = 5;      // The inner radius of each of the three circles. Default: 35
 	const CIRCLE_PANEL_LINE_WIDTH = 2;   // The thickness of the pulsating lines. Default: 2
-	const CIRCLE_PEAK_LINE_WIDTH = 0.6;  // The thickness of the peak meter arc. Default: 0.6
-	const CIRCLE_PEAK_ARC_SIZE = 0.03;   // The length of the peak meter arc (in radians). Default: 0.03
+	const CIRCLE_PEAK_LINE_WIDTH = 0.8;  // The thickness of the peak meter arc. Default: 0.8
+	const CIRCLE_PEAK_ARC_SIZE = 0.06;   // The length of the peak meter arc (in radians). Default: 0.06
 
 	// --- Circle Mode Text Labels ---
 	const CIRCLE_LABEL_SCALE = 0.8;          // The size scale of the text labels. 1.0 is normal, 0.8 is smaller. Default: 0.8
@@ -212,7 +212,7 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.6.5';
+    const PLUGIN_VERSION = 'v1.6.6';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
@@ -324,8 +324,38 @@ function saveGlobalSetting(key, value) {
     saveAllSettings(settings);
 }
 
+function cleanupOldSettings() {
+    const LAST_RUN_VERSION_KEY = 'visualeq_last_run_version';
+    const storedVersion = localStorage.getItem(LAST_RUN_VERSION_KEY);
+
+    if (storedVersion !== PLUGIN_VERSION) {
+        console.log(`VisualEQ: Oppgraderer fra versjon ${storedVersion || 'ukjent'} til ${PLUGIN_VERSION}. Renser gamle innstillinger.`);
+
+        const oldSettingKeys = [
+            'themeIndex', 'sensitivity', 'showPeak', 'showGrid', 
+            'showBarsGrid', 'waveformStereo', 'waveformGrid', 
+            'waveformDuration', 'waveformGlow'
+        ];
+
+        VISUALIZER_MODES.forEach(mode => {
+            oldSettingKeys.forEach(key => {
+                localStorage.removeItem(`visualeq_${mode}_${key}`);
+            });
+        });
+
+        localStorage.removeItem('visualeqEnabled');
+        localStorage.removeItem('visualeqMode');
+        localStorage.removeItem('visualeqFftSize');
+
+        console.log("VisualEQ: Gamle innstillinger er fjernet.");
+
+        localStorage.setItem(LAST_RUN_VERSION_KEY, PLUGIN_VERSION);
+    }
+}
+
 function setupPlugin() {
     addVisualEQToggle();
+	cleanupOldSettings();
 
     const VISIBILITY_STORAGE_KEY = 'visualeq_enabled_state';
     const storedVisibility = localStorage.getItem(VISIBILITY_STORAGE_KEY);
@@ -1621,12 +1651,14 @@ function drawModeBars() {
     eqCtx.closePath();
     eqCtx.fill();
 
-    if (showPeakMeter && peakHeights[i] > 0) {
-        const peakY = eqCanvas.height - peakHeights[i] - PEAK_BAR_HEIGHT;
-        if (peakY < y - PEAK_BAR_HEIGHT) {
-            eqCtx.fillStyle = cachedFillStyle;
+    if (showPeakMeter) {
+        if (peakHeights[i] >= currentBarHeights[i]) {
+
+            const peakY = eqCanvas.height - peakHeights[i] - PEAK_BAR_HEIGHT;
+
+            eqCtx.fillStyle = cachedLedPeakColor;
             eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
-            eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            eqCtx.fillStyle = 'rgba(255, 255, 255, 0.5)';
             eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
         }
     }
@@ -1660,8 +1692,9 @@ function drawModeLed() {
     }
     
     if (showPeakMeter) {
-        const peakBlock = Math.ceil((peakHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
-        if (peakBlock > 0 && peakBlock > litBlocks) {
+        const peakBlock = Math.max(1, Math.ceil((peakHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT));
+
+        if (peakBlock >= litBlocks) {
             const peakY = eqCanvas.height - (peakBlock) * (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
             eqCtx.fillStyle = cachedLedPeakColor;
             eqCtx.fillRect(x, peakY, barWidth, blockHeight);
