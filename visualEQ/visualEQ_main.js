@@ -6,7 +6,7 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.6.6 :: CONFIGURATION
+    // VisualEQ v1.7.0 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
@@ -34,7 +34,7 @@
         DEFAULT_THEME_NAME: 'Server Themecolor',
 
         // Default visualizer mode shown to first-time users.
-        // Valid options: 'Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars'
+        // Valid options: 'Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars', '10-Band EQ + VU', '10-Band EQ + VU LED'
         DEFAULT_VISUALIZER_MODE: 'Bars',
 
 
@@ -59,6 +59,11 @@
         // Valid options: true, false
         DEFAULT_SHOW_WAVEFORM_GRID: true,
 
+		// This adds the background, dB scale, titles, and separator.
+        // Applies to modes: '10-Band EQ + VU', '10-Band EQ + VU LED'.
+        // Valid options: true, false
+        DEFAULT_SHOW_10BandVu_GRID: true,
+
         // Default "Neon Glow" effect for 'Waveform' mode.
         // Recommended to be 0 for best performance, especially on mobile devices.
         // Valid options: 0 (off), 1-10 (glow intensity)
@@ -79,7 +84,31 @@
 
         // Boosts the 'Circle' mode for a more distinct pulse effect.
         // Recommended value: between 0.1 and 1.8
-        CIRCLE_SENSITIVITY_BOOST: 0.6
+        CIRCLE_SENSITIVITY_BOOST: 0.6,
+
+        // ===================================================================================
+        // VU METER CONFIG (FOR '10-Band EQ + VU' & '10-Band EQ + VU LED' MODE)
+        // ===================================================================================
+         VU_METER_CONFIG: {
+            // Audio levels below this threshold will be ignored (reduces noise).
+            // Recommended: 0.5 to 5.0
+            NOISE_GATE: 1.0,
+
+            // A general gain applied to the signal before the exponential curve.
+            // This acts as the default sensitivity for the VU Meter slider.
+            // Recommended: 0.2 to 0.6
+            AMPLIFICATION: 0.2,
+
+            // The "magic" value. Values above 1.0 make the movement exponential.
+            // Recommended: 1.8 to 2.2
+            RISE_EXPONENT: 1.6,
+
+            // Exaggerates the difference between L and R for a more pronounced stereo effect.
+            // 1.0 = No exaggeration. 1.5 = 50% extra separation.
+            // Recommended: 1.2 to 3.0
+            STEREO_EXAGGERATION: 2.0
+			
+        }
     };
 	
 
@@ -130,8 +159,8 @@
 	// --- Visualizer Modes ---
 	// Server owner can safely remove modes from this list to limit user choices.
 	// IMPORTANT: Do not change the order or add new names without adding a corresponding drawMode... function.
-	// Default: ['Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars']
-	const VISUALIZER_MODES = ['Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars'];
+	// Default: ['Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars', '10-Band EQ + VU', '10-Band EQ + VU LED']
+	const VISUALIZER_MODES = ['Bars', 'LED', 'Spectrum', 'Waveform', 'Circle', 'Mirrored Bars', '10-Band EQ + VU', '10-Band EQ + VU LED'];
 
 	// --- Peak Meter ---
 	const PEAK_HOLD_TIME = 500; // How long the peak line should "hold" at the top (in milliseconds). Default: 500
@@ -202,6 +231,52 @@
     const MINIMUM_BAR_HEIGHT = 2; // The minimum visible height of a bar to prevent it from disappearing completely.
     const NOISE_GATE_THRESHOLD = 1.0; // Audio values below this will be treated as silence. Helps reduce background noise flicker.
 
+
+    // =================================================================
+    // ADVANCED EQ BAND TUNING
+    // =================================================================
+    // This section allows for fine-tuning the visual response of each EQ bar.
+    // The arrays for each mode (10-band and 20-band) must have the same number of elements.
+
+    // --- TUNING FOR 10-BAND MODES ('10-Band EQ + VU', '10-Band EQ + VU LED') ---
+
+    // The center frequency (in Hz) for each EQ bar. This determines which part
+    // of the audio spectrum each bar represents.
+    const centerFrequencies_10_bands = [
+        32, 64, 128, 256, 512, 1028, 2048, 4098, 8196, 12000
+    ];
+
+    // A pre-amplifier gain for each band. This is the main tool for balancing the visualizer.
+    // - Values < 1.0 will tame over-active bands (like bass).
+    // - Values > 1.0 will boost weaker bands (like treble).
+    // - 1.0 = no change.
+    const preAmpGains_10_bands = [
+        0.95, 0.95, 0.95, 0.85, 0.95, 1.0, 1.0, 1.0, 1.0, 1.0
+    ];
+
+    // A noise gate threshold (0-255) for each band. Audio signals below this value will be ignored.
+    // Increase this value for a band if it's flickering or always slightly active on quiet audio.
+    const floorLevels_10_bands = [
+        10, 10, 10, 10, 8, 5, 5, 5, 5, 5
+    ];
+
+    // --- TUNING FOR 20-BAND MODES ('Bars', 'LED', 'Mirrored Bars', 'Circle') ---
+
+    // The center frequency (in Hz) for each of the 20 EQ bars.
+	const centerFrequencies_20_bands = [
+		32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1028, 1542, 2048, 3072, 4098, 6147, 8196, 10000, 12000, 14000
+	];
+
+    // Pre-amplifier gain for each of the 20 bands.
+    const preAmpGains_20_bands = [
+        0.95, 0.95, 0.95, 0.95, 0.95, 1.0, 1.05, 1.10, 1.10, 1.10, 1.10, 1.15, 1.15, 1.2, 1.25, 1.3, 1.4, 1.5, 1.6, 1.8
+    ];
+
+    // Noise gate threshold (0-255) for each of the 20 bands.
+	const floorLevels_20_bands = [
+		20, 25, 20, 20, 20, 18, 15, 12, 10, 8, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5
+	];
+
     // --- Analyser Quality ---
     // These are the specific FFT (Fast Fourier Transform) sizes for the Web Audio API.
     // Changing these values without understanding the API can break the visualizer.
@@ -212,7 +287,7 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.6.6';
+    const PLUGIN_VERSION = 'v1.7.0';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
@@ -251,6 +326,14 @@
 	let cachedCircleColors = {};
 	let showBarsGrid = true;
 	let waveformGlowSize = WAVEFORM_GLOW_DEFAULT; 
+	let vuMeterSensitivity = SERVER_OWNER_DEFAULTS.VU_METER_CONFIG.AMPLIFICATION;
+	let show10BandVuGrid = SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_10BandVu_GRID;
+	let leftVuLevel = 0; 
+	let rightVuLevel = 0;
+	let peakVuLevels = [0, 0];
+	let peakVuHoldTimers = [0, 0];
+	let latestLeftVuLevel = 0;
+	let latestRightVuLevel = 0;
 	
 	
 
@@ -278,10 +361,6 @@
             }, 250);
         });
     }
-
-    // ────────────────────────────────────────────────────────────
-    // HOVEDOPPSETT
-    // ────────────────────────────────────────────────────────────
 
 const SETTINGS_STORAGE_KEY = 'visualeq_settings';
 
@@ -688,6 +767,7 @@ function injectPluginStyles() {
           padding: 0; 
           margin-top: 0.6em; 
       }
+
       .visualeq-range-slider::-webkit-slider-thumb { 
           -webkit-appearance: none; 
           appearance: none; 
@@ -700,6 +780,7 @@ function injectPluginStyles() {
           border: 3px solid var(--color-1, #111); 
           transition: transform 0.2s ease; 
       }
+
       .visualeq-range-slider::-moz-range-thumb { 
           width: 28px;
           height: 28px;
@@ -710,6 +791,7 @@ function injectPluginStyles() {
           border: 3px solid var(--color-1, #111); 
           transition: transform 0.2s ease; 
       }
+
 	  .visualeq-range-slider { 
           -webkit-appearance: none; 
           appearance: none; 
@@ -722,6 +804,7 @@ function injectPluginStyles() {
           margin-top: 0.6em;
           pointer-events: none;
       }
+
       .visualeq-range-slider::-webkit-slider-thumb { 
           -webkit-appearance: none; 
           appearance: none; 
@@ -735,6 +818,7 @@ function injectPluginStyles() {
           transition: transform 0.2s ease;
           pointer-events: auto;
       }
+
       .visualeq-range-slider::-moz-range-thumb { 
           width: 28px;
           height: 28px;
@@ -746,36 +830,152 @@ function injectPluginStyles() {
           transition: transform 0.2s ease;
           pointer-events: auto;
       }
-      .visualeq-range-slider:hover::-webkit-slider-thumb { transform: scale(1.1); }
-      .visualeq-range-slider:hover::-moz-range-thumb { transform: scale(1.1); }
 
-      /* Resten av stilene for modal-vinduet */
-      .visualeq-modal-content { background: var(--color-1, #121010); color: var(--color-3, #FFF); border: 1px solid var(--color-2, #333); }
-      .visualeq-modal-content .header { background: var(--color-2, #2A2A2A); padding: 10px 15px; border-bottom: 1px solid var(--color-2, #333); }
-      .visualeq-modal-content h2 { color: var(--color-5, #FFF); font-size: 2em; margin: 0; }
-      .visualeq-modal-content .header a { color: var(--color-5, #FFF); opacity: 2; }
-      .visualeq-modal-content select { width: 100%; padding: 0.8em; background: var(--color-2, #333); color: var(--color-5, #FFF); border: 1px solid var(--color-1, #444); border-radius: 12px; font-size: 1em; }
-      .visualeq-modal-content label { display: block; margin-bottom: 0.6em; font-weight: bold; color: var(--color-5, #E6C269); text-transform: uppercase; font-size: 0.9em; }
-      .visualeq-modal-content .help-section hr { border: none; border-top: 1px solid var(--color-4, #444); opacity: 1.5; margin: 2em 0; }
-      .visualeq-modal-content .help-section p { color: var(--color-5, #FFF); opacity: 2; }
-      #fmdx-modal-close-visualeq { background: var(--color-4, rgba(255,255,255,0.1)); color: var(--color-1, #FFF); transition: background-color 0.2s, transform 0.2s; }
-      #fmdx-modal-close-visualeq:hover { background: var(--color-5, #E6C269); color: var(--color-1, #111); transform: rotate(90deg); }
-      .visualeq-checkbox-container { display: flex; align-items: center; justify-content: space-between; margin-top: 1.5em; padding: 0.8em; background-color: var(--color-2, #2A2A2A); border-radius: 12px; border: 1px solid var(--color-1, #444); }
-      .visualeq-checkbox-container label { color: var(--color-4, #E6C269); text-transform: uppercase; font-size: 0.9em; margin-bottom: 0; }
-      .visualeq-switch { position: relative; display: inline-block; width: 44px; height: 24px; }
-      .visualeq-switch input { display: none; }
-      .visualeq-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--color-1, #ccc); transition: .4s; border-radius: 24px; }
-      .visualeq-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
-      input:checked + .visualeq-slider { background-color: var(--color-4, #2196F3); }
-      input:checked + .visualeq-slider:before { transform: translateX(20px); }
-	  #visualeq-mode-settings-header h4 {
-		color: var(--color-4, #E6C269);
-		margin-top: 1.5em;
-		margin-bottom: 0;
-		font-size: 0.9em;
-		text-transform: uppercase;
-		opacity: 0.8;
-	   }
+      .visualeq-range-slider:hover::-webkit-slider-thumb { 
+		  transform: scale(1.1); 
+	  }
+
+      .visualeq-range-slider:hover::-moz-range-thumb {
+		  transform: scale(1.1); 
+	  }
+
+      .visualeq-modal-content {
+          background: var(--color-1, #121010);
+          color: var(--color-3, #FFF);
+          border: 1px solid var(--color-2, #333);
+      }
+
+      .visualeq-modal-content .header {
+          background: var(--color-2, #2A2A2A);
+          padding: 10px 15px;
+          border-bottom: 1px solid var(--color-2, #333);
+      }
+
+      #fmdx-modal-close-visualeq {
+          background: var(--color-4, rgba(255,255,255,0.1));
+          color: var(--color-1, #FFF);
+          transition: background-color 0.2s, transform 0.2s;
+      }
+
+      #fmdx-modal-close-visualeq:hover {
+          background: var(--color-5, #E6C269);
+          color: var(--color-1, #111);
+          transform: rotate(90deg);
+      }
+
+      .visualeq-modal-content h2 {
+          color: var(--color-5, #FFF);
+          font-size: 2em;
+          margin: 0;
+      }
+
+      .visualeq-modal-content .header a {
+          color: var(--color-5, #FFF);
+          opacity: 0.8;
+      }
+
+      .visualeq-modal-content label {
+          display: block;
+          margin-bottom: 0.6em;
+          font-weight: bold;
+          color: var(--color-5, #E6C269);
+          text-transform: uppercase;
+          font-size: 0.9em;
+      }
+
+      #visualeq-mode-settings-header h4 {
+          color: var(--color-4, #E6C269);
+          margin-top: 1.5em;
+          margin-bottom: 0;
+          font-size: 0.9em;
+          text-transform: uppercase;
+          opacity: 0.8;
+      }
+
+      .visualeq-modal-content .help-section hr {
+          border: none;
+          border-top: 1px solid var(--color-4, #444);
+          opacity: 0.5;
+          margin: 2em 0;
+      }
+
+      .visualeq-modal-content .help-section p {
+          color: var(--color-5, #FFF);
+          opacity: 0.8; /* Justert fra 2 */
+      }
+
+      .visualeq-modal-content select {
+          width: 100%;
+          padding: 0.8em;
+          background: var(--color-2, #333);
+          color: var(--color-5, #FFF);
+          border: 1px solid var(--color-1, #444);
+          border-radius: 12px;
+          font-size: 1em;
+      }
+
+      .visualeq-checkbox-container {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-top: 1.5em;
+          padding: 0.8em;
+          background-color: var(--color-2, #2A2A2A);
+          border-radius: 12px;
+          border: 1px solid var(--color-1, #444);
+      }
+
+      .visualeq-checkbox-container label {
+          color: var(--color-4, #E6C269);
+          text-transform: uppercase;
+          font-size: 0.9em;
+          margin-bottom: 0;
+      }
+
+      .visualeq-switch {
+          position: relative;
+          display: inline-block;
+          width: 44px;
+          height: 24px;
+      }
+
+      .visualeq-switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+      }
+
+      .visualeq-switch .visualeq-slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: var(--color-1, #ccc);
+          transition: .4s;
+          border-radius: 24px;
+      }
+
+      .visualeq-switch .visualeq-slider:before {
+          position: absolute;
+          content: "";
+          height: 18px;
+          width: 18px;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
+          transition: .4s;
+          border-radius: 50%;
+      }
+
+      .visualeq-switch input:checked + .visualeq-slider {
+          background-color: var(--color-4, #2196F3);
+      }
+      .visualeq-switch input:checked + .visualeq-slider:before {
+          transform: translateX(20px);
+      }
+
     `;
     document.head.appendChild(pluginStyles);
 }
@@ -913,7 +1113,13 @@ function createSettingsModal() {
 
     const header = document.createElement('div');
     header.className = 'header';
-    header.innerHTML = `<div><h2>EQ Settings</h2><a href="${GITHUB_URL}" target="_blank" style="text-decoration: none; cursor: pointer;"><p id="visualeq-version-info" style="margin: 4px 0 0; font-size: 0.9em;">VisualEQ ${PLUGIN_VERSION}</p></a></div>`;
+    header.innerHTML = `
+        <div>
+            <h2 style="margin: 0 0 4px 0;">EQ Settings</h2>
+            <a href="${GITHUB_URL}" target="_blank" style="text-decoration: none; cursor: pointer;">
+                <span id="visualeq-version-info" style="font-size: 0.9em;">VisualEQ ${PLUGIN_VERSION}</span>
+            </a>
+        </div>`;
 
     const closeButton = document.createElement('button');
     closeButton.id = 'fmdx-modal-close-visualeq';
@@ -954,6 +1160,19 @@ function createSettingsModal() {
     sensLabelEl.htmlFor = 'sensitivity';
     sensLabelEl.innerHTML = `Sensitivity <span>(${SENSITIVITY.toFixed(1)})</span>`;
 
+    const vuSensitivitySlider = document.createElement('input');
+    vuSensitivitySlider.id = 'visualeq-vu-sensitivity-slider';
+    vuSensitivitySlider.className = 'visualeq-range-slider';
+    Object.assign(vuSensitivitySlider, { type: 'range', min: 0.1, max: 1.2, step: 0.05, value: vuMeterSensitivity });
+
+    const vuSensLabelEl = document.createElement('label');
+    vuSensLabelEl.id = 'visualeq-vu-sensitivity-label';
+    vuSensLabelEl.innerHTML = `VU Meter Sensitivity <span>(${vuMeterSensitivity.toFixed(2)})</span>`;
+
+    const vuSensitivityContainer = document.createElement('div');
+    forceStyle(vuSensitivityContainer, { marginTop: '1.5em', display: 'none' });
+    vuSensitivityContainer.append(vuSensLabelEl, vuSensitivitySlider);
+
     const waveformDurationSlider = document.createElement('input');
     waveformDurationSlider.id = 'visualeq-duration-slider';
     waveformDurationSlider.className = 'visualeq-range-slider';
@@ -993,6 +1212,10 @@ function createSettingsModal() {
     waveformGridContainer.className = 'visualeq-checkbox-container';
     waveformGridContainer.innerHTML = `<label>Show Background Grid</label><label class="visualeq-switch"><input type="checkbox" id="visualeq-wave-grid-toggle-input"><span class="visualeq-slider"></span></label>`;
     
+    const proDesignToggleContainer = document.createElement('div');
+    proDesignToggleContainer.className = 'visualeq-checkbox-container';
+    proDesignToggleContainer.innerHTML = `<label>Show VU+ Grid</label><label class="visualeq-switch"><input type="checkbox" id="visualeq-pro-design-toggle-input"><span class="visualeq-slider"></span></label>`;
+
     const waveformDurationContainer = document.createElement('div');
     forceStyle(waveformDurationContainer, { marginTop: '1.5em' });
     waveformDurationContainer.append(waveDurationLabelEl, waveformDurationSlider);
@@ -1010,7 +1233,9 @@ function createSettingsModal() {
         'Spectrum': "<strong>Spectrum:</strong> Draws a smooth graph of the audio frequencies. 'Grid & Labels' helps you visualize the frequency ranges (Hz).",
         'Waveform': "<strong>Waveform:</strong> Displays the audio signal over time. 'Duration' controls how much history is shown, and 'Neon Glow' adds a visual effect.",
         'Circle': "<strong>Circle:</strong> Splits the frequencies into Bass, Midrange, and Treble, each represented by a pulsating circle.",
-        'Mirrored Bars': "<strong>Mirrored Bars:</strong> Similar to 'Bars', but mirrored from the center for a symmetrical effect."
+        'Mirrored Bars': "<strong>Mirrored Bars:</strong> Similar to 'Bars', but mirrored from the center for a symmetrical effect.",
+        '10-Band EQ + VU': "<strong>10-Band EQ + VU:</strong> A new view combining a precise 10-band equalizer with a classic stereo VU meter.",
+        '10-Band EQ + VU LED': "<strong>10-Band EQ + VU LED:</strong> Combines the precise 10-band audio processing and stereo VU meter with a classic LED block display."
     };
 
     const updateHelpSection = (mode) => {
@@ -1048,6 +1273,8 @@ function createSettingsModal() {
         
         if (slider.id === 'visualeq-sensitivity-slider') {
             sliderTooltip.textContent = val.toFixed(1);
+        } else if (slider.id === 'visualeq-vu-sensitivity-slider') {
+            sliderTooltip.textContent = val.toFixed(2);
         } else if (slider.id === 'visualeq-duration-slider') {
             sliderTooltip.textContent = `${val.toFixed(1)}s`;
         } else if (slider.id === 'visualeq-glow-slider') {
@@ -1068,7 +1295,25 @@ function createSettingsModal() {
 
     const handleModeChange = (selectedMode) => {
         currentVisualizerMode = selectedMode;
-        saveGlobalSetting('lastMode', currentVisualizerMode); 
+        saveGlobalSetting('lastMode', currentVisualizerMode);
+
+        let requiredBands = 0;
+        switch (selectedMode) {
+            case '10-Band EQ + VU':
+            case '10-Band EQ + VU LED':
+                requiredBands = 10;
+                break;
+            case 'Spectrum': case 'Circle': requiredBands = 60; break;
+            case 'Waveform': requiredBands = 0; break;
+            default: requiredBands = 20; break;
+        }
+
+        if (requiredBands > 0) {
+            currentBarHeights = new Array(requiredBands).fill(0);
+            peakHeights = new Array(requiredBands).fill(0);
+            peakHoldTimers = new Array(requiredBands).fill(0);
+            latestBandLevels = new Array(requiredBands).fill(0);
+        }
 
         const allSettings = loadAllSettings();
         const modeSettings = allSettings.modes?.[selectedMode] || {};
@@ -1082,7 +1327,9 @@ function createSettingsModal() {
         showWaveformGrid = modeSettings.waveformGrid ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_WAVEFORM_GRID;
         waveformDuration = modeSettings.waveformDuration ?? WAVEFORM_DURATION_DEFAULT;
         waveformGlowSize = modeSettings.waveformGlow ?? SERVER_OWNER_DEFAULTS.DEFAULT_WAVEFORM_GLOW;
-        
+        vuMeterSensitivity = modeSettings.vuSensitivity ?? SERVER_OWNER_DEFAULTS.VU_METER_CONFIG.AMPLIFICATION;
+        show10BandVuGrid = modeSettings.show10BandVuGrid ?? SERVER_OWNER_DEFAULTS.DEFAULT_SHOW_10BandVu_GRID;
+
         updateModalUI();
         updateCachedStyles();
 
@@ -1091,27 +1338,21 @@ function createSettingsModal() {
         modeHeaderText.textContent = `${selectedMode} Settings`;
         modeHeaderEl.style.display = 'block';
         
-        peakMeterContainer.style.display = ['Bars', 'LED', 'Circle', 'Mirrored Bars'].includes(selectedMode) ? 'flex' : 'none';
+        const isVuMode = ['10-Band EQ + VU', '10-Band EQ + VU LED'].includes(selectedMode);
+        peakMeterContainer.style.display = ['Bars', 'LED', 'Circle', 'Mirrored Bars'].includes(selectedMode) || isVuMode ? 'flex' : 'none';
         gridToggleContainer.style.display = (selectedMode === 'Spectrum') ? 'flex' : 'none';
         barsGridToggleContainer.style.display = ['Bars', 'LED'].includes(selectedMode) ? 'flex' : 'none';
-        
         const isWaveform = selectedMode === 'Waveform';
         waveformStereoContainer.style.display = isWaveform ? 'flex' : 'none';
         waveformGridContainer.style.display = isWaveform ? 'flex' : 'none';
         waveformDurationContainer.style.display = isWaveform ? 'block' : 'none';
         waveformGlowContainer.style.display = isWaveform ? 'block' : 'none';
-		
-        if (['Bars', 'LED'].includes(selectedMode)) {
-            drawBarsGridToBuffer();
-        } else if (selectedMode === 'Waveform') {
-            drawWaveformGrid();
-        } else {
-            if (gridCtx && gridCanvas) {
-                gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
-            }
-        }
-
-
+        vuSensitivityContainer.style.display = isVuMode ? 'block' : 'none';
+        proDesignToggleContainer.style.display = isVuMode ? 'flex' : 'none';
+        
+        if (['Bars', 'LED'].includes(selectedMode)) { drawBarsGridToBuffer(); } 
+        else if (selectedMode === 'Waveform') { drawWaveformGrid(); } 
+        else { if (gridCtx && gridCanvas) { gridCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height); } }
         updateHelpSection(selectedMode);
     };
 
@@ -1119,16 +1360,20 @@ function createSettingsModal() {
         modeSelect.value = currentVisualizerMode;
         themeSelect.value = currentThemeIndex;
         sensitivitySlider.value = SENSITIVITY;
-        sensLabelEl.querySelector('span').textContent = `(${SENSITIVITY.toFixed(1)})`;
+        sensLabelEl.querySelector('span').textContent = `(EQ: ${SENSITIVITY.toFixed(1)})`;
         waveformDurationSlider.value = waveformDuration;
         waveDurationLabelEl.querySelector('span').textContent = `(${waveformDuration.toFixed(1)}s)`;
         waveformGlowSlider.value = waveformGlowSize;
         waveGlowLabelEl.querySelector('span').textContent = `(${waveformGlowSize === 0 ? 'Off' : waveformGlowSize})`;
+        vuSensitivitySlider.value = vuMeterSensitivity;
+        vuSensLabelEl.querySelector('span').textContent = `(${vuMeterSensitivity.toFixed(2)})`;
 
         updateSliderFill(sensitivitySlider);
         updateSliderFill(waveformDurationSlider);
         updateSliderFill(waveformGlowSlider);
+        updateSliderFill(vuSensitivitySlider);
 
+        proDesignToggleContainer.querySelector('input').checked = show10BandVuGrid;
         peakMeterContainer.querySelector('input').checked = showPeakMeter;
         gridToggleContainer.querySelector('input').checked = showSpectrumGrid;
         barsGridToggleContainer.querySelector('input').checked = showBarsGrid;
@@ -1137,52 +1382,101 @@ function createSettingsModal() {
     };
 
     modeSelect.onchange = (e) => handleModeChange(e.target.value);
-    
-    themeSelect.onchange = () => { 
-        currentThemeIndex = parseInt(themeSelect.value, 10);
-        saveSettingForMode(currentVisualizerMode, 'themeIndex', currentThemeIndex);
-        updateCachedStyles(); 
-    };
 
-    sensitivitySlider.addEventListener('input', () => {
-        SENSITIVITY = parseFloat(sensitivitySlider.value);
-        sensLabelEl.querySelector('span').textContent = `(${SENSITIVITY.toFixed(1)})`;
-        saveSettingForMode(currentVisualizerMode, 'sensitivity', SENSITIVITY);
-    });
+	const handleThemeChange = (event) => {
+		currentThemeIndex = parseInt(event.target.value, 10);
+		saveSettingForMode(currentVisualizerMode, 'themeIndex', currentThemeIndex);
+		updateCachedStyles();
+	};
 
-    waveformDurationSlider.addEventListener('input', () => {
-        waveformDuration = parseFloat(waveformDurationSlider.value);
-        waveDurationLabelEl.querySelector('span').textContent = `(${waveformDuration.toFixed(1)}s)`;
-        saveSettingForMode(currentVisualizerMode, 'waveformDuration', waveformDuration);
+	const handleSensitivityChange = (event) => {
+		SENSITIVITY = parseFloat(event.target.value);
+		sensLabelEl.querySelector('span').textContent = `(EQ: ${SENSITIVITY.toFixed(1)})`;
+		saveSettingForMode(currentVisualizerMode, 'sensitivity', SENSITIVITY);
+	};
+
+	const handleVuSensitivityChange = (event) => {
+		vuMeterSensitivity = parseFloat(event.target.value);
+		vuSensLabelEl.querySelector('span').textContent = `(${vuMeterSensitivity.toFixed(2)})`;
+		saveSettingForMode(currentVisualizerMode, 'vuSensitivity', vuMeterSensitivity);
+	};
+
+	const handleProDesignToggle = (event) => {
+		show10BandVuGrid = event.target.checked;
+		saveSettingForMode(currentVisualizerMode, 'show10BandVuGrid', show10BandVuGrid);
+	};
+
+	const handleWaveformDurationChange = (event) => {
+		waveformDuration = parseFloat(event.target.value);
+		waveDurationLabelEl.querySelector('span').textContent = `(${waveformDuration.toFixed(1)}s)`;
+		saveSettingForMode(currentVisualizerMode, 'waveformDuration', waveformDuration);
 		drawWaveformGrid();
-    });
+	};
 
-    waveformGlowSlider.addEventListener('input', () => {
-        waveformGlowSize = parseInt(waveformGlowSlider.value, 10);
-        waveGlowLabelEl.querySelector('span').textContent = `(${waveformGlowSize === 0 ? 'Off' : waveformGlowSize})`;
-        saveSettingForMode(currentVisualizerMode, 'waveformGlow', waveformGlowSize);
-    });
-    
-    peakMeterContainer.querySelector('input').onchange = (e) => { showPeakMeter = e.target.checked; saveSettingForMode(currentVisualizerMode, 'showPeak', showPeakMeter); };
-    gridToggleContainer.querySelector('input').onchange = (e) => { showSpectrumGrid = e.target.checked; saveSettingForMode(currentVisualizerMode, 'showGrid', showSpectrumGrid); };
-    barsGridToggleContainer.querySelector('input').onchange = (e) => { 
-        showBarsGrid = e.target.checked; 
-        saveSettingForMode(currentVisualizerMode, 'showBarsGrid', showBarsGrid); 
-        drawBarsGridToBuffer();
-    };
-    waveformStereoContainer.querySelector('input').onchange = (e) => { isWaveformStereo = e.target.checked; saveSettingForMode(currentVisualizerMode, 'waveformStereo', isWaveformStereo); };
-    waveformGridContainer.querySelector('input').onchange = (e) => { showWaveformGrid = e.target.checked; saveSettingForMode(currentVisualizerMode, 'waveformGrid', showWaveformGrid); drawWaveformGrid(); };
-    qualitySelect.onchange = () => { const newFftSize = parseInt(qualitySelect.value, 10); saveGlobalSetting('fftSize', newFftSize); currentFftSize = newFftSize; startOrRestartEQ(); };
+	const handleWaveformGlowChange = (event) => {
+		waveformGlowSize = parseInt(event.target.value, 10);
+		waveGlowLabelEl.querySelector('span').textContent = `(${waveformGlowSize === 0 ? 'Off' : waveformGlowSize})`;
+		saveSettingForMode(currentVisualizerMode, 'waveformGlow', waveformGlowSize);
+	};
 
-    const createControlSection = (label, controlElement, marginTop = '0') => {
-        const container = document.createElement('div');
-        container.append(document.createElement('label'), controlElement);
-        container.querySelector('label').innerHTML = label;
-        forceStyle(container, { marginTop });
-        return container;
-    };
+	const handlePeakMeterToggle = (event) => {
+		showPeakMeter = event.target.checked;
+		saveSettingForMode(currentVisualizerMode, 'showPeak', showPeakMeter);
+	};
+
+	const handleSpectrumGridToggle = (event) => {
+		showSpectrumGrid = event.target.checked;
+		saveSettingForMode(currentVisualizerMode, 'showGrid', showSpectrumGrid);
+	};
+
+	const handleBarsGridToggle = (event) => {
+		showBarsGrid = event.target.checked;
+		saveSettingForMode(currentVisualizerMode, 'showBarsGrid', showBarsGrid);
+		drawBarsGridToBuffer();
+	};
+
+	const handleWaveformStereoToggle = (event) => {
+		isWaveformStereo = event.target.checked;
+		saveSettingForMode(currentVisualizerMode, 'waveformStereo', isWaveformStereo);
+	};
+
+	const handleWaveformGridToggle = (event) => {
+		showWaveformGrid = event.target.checked;
+		saveSettingForMode(currentVisualizerMode, 'waveformGrid', showWaveformGrid);
+		drawWaveformGrid();
+	};
+
+	const handleQualityChange = (event) => {
+		const newFftSize = parseInt(event.target.value, 10);
+		saveGlobalSetting('fftSize', newFftSize);
+		currentFftSize = newFftSize;
+		startOrRestartEQ();
+	};
+
+	themeSelect.onchange = handleThemeChange;
+	sensitivitySlider.addEventListener('input', handleSensitivityChange);
+	vuSensitivitySlider.addEventListener('input', handleVuSensitivityChange);
+	proDesignToggleContainer.querySelector('input').onchange = handleProDesignToggle;
+	waveformDurationSlider.addEventListener('input', handleWaveformDurationChange);
+	waveformGlowSlider.addEventListener('input', handleWaveformGlowChange);
+	peakMeterContainer.querySelector('input').onchange = handlePeakMeterToggle;
+	gridToggleContainer.querySelector('input').onchange = handleSpectrumGridToggle;
+	barsGridToggleContainer.querySelector('input').onchange = handleBarsGridToggle;
+	waveformStereoContainer.querySelector('input').onchange = handleWaveformStereoToggle;
+	waveformGridContainer.querySelector('input').onchange = handleWaveformGridToggle;
+	qualitySelect.onchange = handleQualityChange;
+
+	const createControlSection = (label, controlElement, marginTop = '0') => {
+		const container = document.createElement('div');
+		const labelElement = document.createElement('label');
     
-    const sensitivityContainer = document.createElement('div');
+		labelElement.innerHTML = label;
+		container.append(labelElement, controlElement);
+    
+		forceStyle(container, { marginTop });
+		return container;
+	};
+   const sensitivityContainer = document.createElement('div');
     forceStyle(sensitivityContainer, { marginTop: '1.5em' });
     sensitivityContainer.append(sensLabelEl, sensitivitySlider);
     
@@ -1190,15 +1484,17 @@ function createSettingsModal() {
         createControlSection('Visualizer Mode', modeSelect),
         modeSettingsHeader,
         createControlSection('Theme', themeSelect, '1.em'),
-		createControlSection('Analyser Quality', qualitySelect, '1.5em'),
+		createControlSection('Analyser Quality', qualitySelect, '1.em'),
         peakMeterContainer,
+        proDesignToggleContainer,
         gridToggleContainer,
         barsGridToggleContainer,
         waveformStereoContainer,
         waveformGridContainer,
         waveformDurationContainer,
         waveformGlowContainer,
-        sensitivityContainer,        
+        sensitivityContainer,
+        vuSensitivityContainer,
         helpSection
     );
     
@@ -1209,6 +1505,7 @@ function createSettingsModal() {
     document.body.appendChild(modalOverlay);
 
     attachSliderEvents(sensitivitySlider);
+    attachSliderEvents(vuSensitivitySlider);
     attachSliderEvents(waveformDurationSlider);
     attachSliderEvents(waveformGlowSlider);
 
@@ -1390,82 +1687,63 @@ function startOrRestartEQ() {
     animationFrameId = requestAnimationFrame(drawEQ);
 }
 
-const bandRanges_20_bands_definition = [
-    // Sub-Bass & Bass
-    { start: 2, end: 3 },     // ~60 Hz
-    { start: 4, end: 5 },     // ~100 Hz
-    { start: 7, end: 8 },     // ~150 Hz
-    { start: 10, end: 12 },   // ~220 Hz
-    // Low Mids
-    { start: 15, end: 18 },   // ~350 Hz
-    { start: 22, end: 26 },   // ~500 Hz
-    { start: 30, end: 35 },   // ~700 Hz
-    { start: 40, end: 46 },   // ~900 Hz
-    // Midrange
-    { start: 50, end: 58 },   // ~1.2 kHz
-    { start: 65, end: 75 },   // ~1.5 kHz
-    { start: 82, end: 94 },   // ~2.0 kHz
-    { start: 105, end: 120 }, // ~2.5 kHz
-    // Upper Mids
-    { start: 135, end: 150 }, // ~3.2 kHz
-    { start: 165, end: 180 }, // ~4.0 kHz
-    { start: 200, end: 220 }, // ~5.0 kHz
-    { start: 240, end: 265 }, // ~6.0 kHz
-    // Treble / Presence
-    { start: 300, end: 330 }, // ~7.5 kHz
-    { start: 380, end: 420 }, // ~9.5 kHz
-    { start: 480, end: 520 }, // ~12 kHz
-    { start: 580, end: 640 }  // ~15 kHz
-];
+function calculatePeakMethodLevels(frequencyData, sensitivity, centerFrequencies, floorLevels, preAmpGains) {
+    if (!audioContext || !analyserLeft) return [];
 
-function calculateBandLevels(numBands, frequencyData) { 
-  if (!frequencyData || !audioContext) return new Array(numBands).fill(0);
+    const nyquist = audioContext.sampleRate / 2;
+    const binCount = analyserLeft.frequencyBinCount;
+    const levels = [];
 
-  if (numBands === 20) {
-    const definition = bandRanges_20_bands_definition;
-    if (frequencyData.length < 801) { 
-        const scale = frequencyData.length / 801;
-        return definition.map(range => {
-            let sum = 0;
-            const start = Math.floor(range.start * scale);
-            const end = Math.floor(range.end * scale);
-            for (let i = start; i <= end; i++) sum += frequencyData[i] || 0;
-            return sum / ((end - start + 1) || 1);
-        });
-    }
-    return definition.map(range => {
-      let sum = 0;
-      for (let i = range.start; i <= range.end; i++) sum += frequencyData[i] || 0;
-      return sum / ((range.end - range.start + 1) || 1);
-    });
-  }
-  
-  const levels = [];
-  const targetFrequencyCutoff = 16000;
-  const maxPossibleFrequency = audioContext.sampleRate / 2;
-  const maxIndex = Math.min(
-      frequencyData.length - 1,
-      Math.floor((targetFrequencyCutoff / maxPossibleFrequency) * frequencyData.length)
-  );
+    centerFrequencies.forEach((freq, bandIndex) => {
+        const targetBin = Math.floor((freq / nyquist) * binCount);
+        const windowSize = 2;
+        const startIndex = Math.max(0, targetBin - windowSize);
+        const endIndex = Math.min(binCount - 1, targetBin + windowSize);
 
-  let lastIndex = 1;
-  for (let i = 0; i < numBands; i++) {
-    let endIndex = Math.floor(Math.pow(maxIndex, (i + 1) / numBands));
-    const startIndex = Math.max(lastIndex, 1);
-    if (endIndex < startIndex) { endIndex = startIndex; }
-    
-    let sum = 0;
-    let count = 0;
-    if (startIndex <= endIndex && startIndex < frequencyData.length) {
-        for (let j = startIndex; j <= endIndex; j++) {
-            sum += frequencyData[j] || 0;
-            count++;
+        let peakValue = 0;
+        for (let i = startIndex; i <= endIndex; i++) {
+            if (frequencyData[i] > peakValue) {
+                peakValue = frequencyData[i];
+            }
         }
+        
+        const balancedPeak = peakValue * (preAmpGains[bandIndex] || 1.0);
+        const floor = floorLevels[bandIndex] || 5;
+
+        let finalValue = 0;
+        if (balancedPeak > floor) {
+            const normalizedSignal = (balancedPeak - floor) / (255 - floor);
+            const exponent = 1 / sensitivity;
+            const curvedSignal = Math.pow(normalizedSignal, exponent);
+            finalValue = curvedSignal * 255;
+        }
+
+        levels.push(Math.max(0, Math.min(finalValue, 255)));
+    });
+
+    return levels;
+}
+
+function interpolateBands(sourceBands, targetCount) {
+    if (!sourceBands || sourceBands.length < 2) return new Array(targetCount).fill(0);
+
+    const newBands = [];
+    const sourceLen = sourceBands.length;
+
+    for (let i = 0; i < targetCount; i++) {
+        const virtualIndex = i * (sourceLen - 1) / (targetCount - 1);
+        
+        const index1 = Math.floor(virtualIndex);
+        const index2 = Math.ceil(virtualIndex);
+        const blend = virtualIndex - index1;
+        const val1 = sourceBands[index1];
+        const val2 = sourceBands[index2];
+        const interpolatedValue = val1 * (1 - blend) + val2 * blend;
+        
+        newBands.push(interpolatedValue);
     }
-    levels.push(count > 0 ? sum / count : 0);
-    lastIndex = endIndex + 1;
-  }
-  return levels;
+
+    return newBands;
 }
 
 function updateBarHeights(bandLevels, deltaTime) {
@@ -1473,14 +1751,25 @@ function updateBarHeights(bandLevels, deltaTime) {
 
     const requiredSize = bandLevels.length;
     if (currentBarHeights.length !== requiredSize) {
-        console.log(`VisualEQ: Resizing physics arrays from ${currentBarHeights.length} to ${requiredSize} bands.`);
         currentBarHeights = new Array(requiredSize).fill(0);
         peakHeights = new Array(requiredSize).fill(0);
         peakHoldTimers = new Array(requiredSize).fill(0);
     }
 
+    const isLegacyMode = ['Spectrum', 'Circle'].includes(currentVisualizerMode);
+
     bandLevels.forEach((level, i) => {
-        let targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
+        let targetHeight;
+
+        if (isLegacyMode) {
+            targetHeight = (level / 255) * eqCanvas.height * SENSITIVITY;
+        } else {
+            const normalizedLevel = level / 255;
+            const exponent = 1 / SENSITIVITY; 
+            const curvedLevel = Math.pow(normalizedLevel, exponent);
+            targetHeight = curvedLevel * eqCanvas.height;
+        }
+
         if (targetHeight < NOISE_GATE_THRESHOLD) targetHeight = 0;
 
         currentBarHeights[i] = targetHeight > currentBarHeights[i] 
@@ -1502,44 +1791,54 @@ function updateBarHeights(bandLevels, deltaTime) {
 
 function drawEQ(currentTime) {
     let deltaTimeMs = currentTime - (lastFrameTime || currentTime);
-    
-    if (deltaTimeMs > 1000) {
-        deltaTimeMs = TARGET_INTERVAL;
-    }
-
+    if (deltaTimeMs > 1000) deltaTimeMs = 16.67;
     lastFrameTime = currentTime;
     timeSinceLastSample += deltaTimeMs;
 
     if (timeSinceLastSample >= TARGET_INTERVAL) {
-        timeSinceLastSample -= TARGET_INTERVAL;
-
-        if (currentVisualizerMode !== 'Waveform') {
-            if (analyserLeft && analyserRight && audioContext && audioContext.state === 'running') {
+        timeSinceLastSample %= TARGET_INTERVAL;
+        if (analyserLeft && analyserRight && audioContext.state === 'running') {
+            if (currentVisualizerMode !== 'Waveform') {
                 analyserLeft.getByteFrequencyData(dataArrayLeft);
                 analyserRight.getByteFrequencyData(dataArrayRight);
+                
                 const combinedDataArray = new Uint8Array(dataArrayLeft.length);
                 for (let i = 0; i < dataArrayLeft.length; i++) {
                     combinedDataArray[i] = (dataArrayLeft[i] + dataArrayRight[i]) / 2;
                 }
-                const numBands = (currentVisualizerMode === 'Spectrum' || currentVisualizerMode === 'Circle') ? 60 : 20;
-                const bandLevels = calculateBandLevels(numBands, combinedDataArray);
-				
-				latestBandLevels = bandLevels;
-                updateBarHeights(bandLevels, TARGET_INTERVAL / 1000);
+                
+                const isVuMode = ['10-Band EQ + VU', '10-Band EQ + VU LED'].includes(currentVisualizerMode);
+                const isBarMode = ['Bars', 'LED', 'Mirrored Bars'].includes(currentVisualizerMode);
+                const isGraphMode = ['Spectrum', 'Circle'].includes(currentVisualizerMode);
 
-                updateBarHeights(bandLevels, TARGET_INTERVAL / 1000);
-            }
-        }
-		else {
-            if (analyserLeft && analyserRight) {
+                if (isVuMode) {
+                    const vuLevels = processVuMeterLevels(dataArrayLeft, dataArrayRight);
+                    latestLeftVuLevel = vuLevels.left;
+                    latestRightVuLevel = vuLevels.right;
+                    
+                    latestBandLevels = calculatePeakMethodLevels(
+                        combinedDataArray, SENSITIVITY,
+                        centerFrequencies_10_bands, floorLevels_10_bands, preAmpGains_10_bands
+                    );
+                } else if (isBarMode) {
+                    latestBandLevels = calculatePeakMethodLevels(
+                        combinedDataArray, SENSITIVITY,
+                        centerFrequencies_20_bands, floorLevels_20_bands, preAmpGains_20_bands
+                    );
+                } else if (isGraphMode) {
+                    const sourceBands = calculatePeakMethodLevels(
+                        combinedDataArray, SENSITIVITY,
+                        centerFrequencies_20_bands, floorLevels_20_bands, preAmpGains_20_bands
+                    );
+                    latestBandLevels = interpolateBands(sourceBands, 80);
+                }
+
+            } else {
                 analyserLeft.getByteTimeDomainData(dataArrayLeft);
                 analyserRight.getByteTimeDomainData(dataArrayRight);
-                
                 const centerY = eqCanvas.height / 2;
                 let newY;
-
                 const effectiveSensitivity = SENSITIVITY * SERVER_OWNER_DEFAULTS.WAVEFORM_SENSITIVITY_BOOST;
-
                 if (isWaveformStereo) {
                     const leftSample = dataArrayLeft[Math.floor(dataArrayLeft.length / 2)];
                     const rightSample = dataArrayRight[Math.floor(dataArrayRight.length / 2)];
@@ -1554,38 +1853,33 @@ function drawEQ(currentTime) {
                         bottom: centerY + (monoSample - 128) * effectiveSensitivity 
                     };
                 }
-                
                 waveformHistoryBuffer[waveformHistoryIndex] = newY;
                 waveformHistoryIndex = (waveformHistoryIndex + 1) % WAVEFORM_BUFFER_SIZE;
             }
         }
     }
 
-    eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
-
-
-    switch (currentVisualizerMode) {
-        case 'LED':
-            drawModeLed();
-            break;
-        case 'Spectrum':
-            drawModeSpectrum();
-            break;
-        case 'Waveform':
-            drawModeWaveform();
-            break;
-        case 'Circle':
-            drawModeCircle();
-            break;
-        case 'Mirrored Bars':
-            drawModeMirroredBars();
-            break;
-        case 'Bars':
-        default:
-            drawModeBars();
-            break;
+    const deltaTimeSec = deltaTimeMs / 1000;
+    if (currentVisualizerMode !== 'Waveform') {
+        if (latestBandLevels && latestBandLevels.length > 0) {
+            updateBarHeights(latestBandLevels, deltaTimeSec);
+        }
+        if (['10-Band EQ + VU', '10-Band EQ + VU LED'].includes(currentVisualizerMode)) {
+            applyVuMeterPhysics(latestLeftVuLevel, latestRightVuLevel, deltaTimeSec);
+        }
     }
-    
+
+    eqCtx.clearRect(0, 0, eqCanvas.width, eqCanvas.height);
+    switch (currentVisualizerMode) {
+        case 'LED': drawModeLed(); break;
+        case 'Spectrum': drawModeSpectrum(); break;
+        case 'Waveform': drawModeWaveform(); break;
+        case 'Circle': drawModeCircle(); break;
+        case 'Mirrored Bars': drawModeMirroredBars(); break;
+        case '10-Band EQ + VU': drawMode10BandVu(); break;
+        case '10-Band EQ + VU LED': drawMode10BandVuLed(); break;
+        case 'Bars': default: drawModeBars(); break;
+    }
     animationFrameId = requestAnimationFrame(drawEQ);
 }
 
@@ -1723,7 +2017,7 @@ function drawSpectrumGrid(bandLevels) {
         eqCtx.stroke();
     }
 
-    const bandsPerZone = 6;
+    const bandsPerZone = 8;
     for (let i = bandsPerZone; i < bandLevels.length; i += bandsPerZone) {
         const x = HORIZONTAL_MARGIN + i * spacing;
         eqCtx.beginPath();
@@ -1995,4 +2289,355 @@ function drawModeMirroredBars() {
     }
 }
 
+function applyVuMeterPhysics(leftLevel, rightLevel, deltaTime) {
+    const levels = [leftLevel, rightLevel];
+    
+    levels.forEach((level, i) => {
+        let targetHeight = (level / 255) * eqCanvas.height;
+        if (targetHeight > eqCanvas.height) targetHeight = eqCanvas.height;
+
+        const currentLevel = (i === 0) ? leftVuLevel : rightVuLevel;
+        const newLevel = targetHeight > currentLevel
+            ? targetHeight
+            : Math.max(0, currentLevel - (FALL_SPEED * 1.5 * deltaTime));
+
+        if (i === 0) leftVuLevel = newLevel;
+        else rightVuLevel = newLevel;
+
+        if (showPeakMeter) {
+            if (newLevel >= peakVuLevels[i]) {
+                peakVuLevels[i] = newLevel;
+                peakVuHoldTimers[i] = performance.now();
+            } else {
+                if (performance.now() - peakVuHoldTimers[i] > PEAK_HOLD_TIME) {
+                    peakVuLevels[i] = Math.max(0, peakVuLevels[i] - (PEAK_FALL_SPEED * deltaTime));
+                }
+            }
+        }
+    });
+}
+
+function processVuMeterLevels(dataArrayLeft, dataArrayRight) {
+    const config = SERVER_OWNER_DEFAULTS.VU_METER_CONFIG;
+
+    const binCount = dataArrayLeft.length;
+    const startBin = Math.floor(binCount * 0.01);
+    const endBin = Math.floor(binCount * 0.5);
+
+    let sumLeft = 0, sumRight = 0;
+    for (let i = startBin; i < endBin; i++) {
+        sumLeft += dataArrayLeft[i];
+        sumRight += dataArrayRight[i];
+    }
+
+    const divisor = endBin - startBin;
+    let levelLeft = sumLeft / divisor;
+    let levelRight = sumRight / divisor;
+
+    const totalLevel = levelLeft + levelRight;
+    if (totalLevel > 1) {
+        const difference = levelLeft - levelRight;
+        const exaggerationFactor = (Math.abs(difference) / totalLevel) * config.STEREO_EXAGGERATION;
+        
+        if (levelLeft > levelRight) {
+            levelLeft *= (1 + exaggerationFactor);
+            levelRight *= (1 - exaggerationFactor);
+        } else {
+            levelRight *= (1 + exaggerationFactor);
+            levelLeft *= (1 - exaggerationFactor);
+        }
+    }
+    
+    const applyCurve = (level) => {
+        if (level < config.NOISE_GATE) return 0;
+        let processed = Math.pow(level * vuMeterSensitivity, config.RISE_EXPONENT);
+        return Math.min(processed, 255);
+    };
+
+    return {
+        left: applyCurve(levelLeft),
+        right: applyCurve(levelRight)
+    };
+}
+
+function drawMode10BandVu() {
+    const vuMeterSectionWidth = eqCanvas.width * 0.25;
+    const eqSectionWidth = eqCanvas.width - vuMeterSectionWidth;
+    const numBands = 10;
+
+    const drawBackground = () => {
+        const centerX = eqCanvas.width / 2;
+        const centerY = eqCanvas.height / 2;
+        const backgroundGradient = eqCtx.createRadialGradient(centerX, centerY, 0, centerX, centerY, eqCanvas.width * 0.8);
+        backgroundGradient.addColorStop(0, '#2a2a2a');
+        backgroundGradient.addColorStop(1, '#1a1a1a');
+        eqCtx.fillStyle = backgroundGradient;
+        eqCtx.fillRect(0, 0, eqCanvas.width, eqCanvas.height);
+    };
+
+    const drawGridAndScale = () => {
+        eqCtx.save();
+        eqCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        eqCtx.font = 'bold 9px Arial';
+        eqCtx.textAlign = 'left';
+        eqCtx.textBaseline = 'middle';
+        const levels = [0.25, 0.50, 0.75];
+        const labels = ['-18', '-9', '0'];
+        levels.forEach((level, index) => {
+            const y = eqCanvas.height * (1 - level);
+            eqCtx.beginPath();
+            eqCtx.setLineDash([2, 4]);
+            eqCtx.moveTo(25, y);
+            eqCtx.lineTo(eqCanvas.width, y);
+            eqCtx.stroke();
+            eqCtx.fillText(labels[index], 5, y);
+        });
+        eqCtx.strokeStyle = 'rgba(255, 50, 50, 0.2)';
+        eqCtx.beginPath();
+        eqCtx.moveTo(25, 2);
+        eqCtx.lineTo(eqCanvas.width, 2);
+        eqCtx.stroke();
+        eqCtx.fillStyle = 'rgba(255, 50, 50, 0.5)';
+        eqCtx.fillText('PEAK', 5, 6);
+        eqCtx.restore();
+    };
+
+    const applyGlossEffect = (x, y, width, height) => {
+        const glossGradient = eqCtx.createLinearGradient(x, 0, x + width, 0);
+        glossGradient.addColorStop(0, 'rgba(0, 0, 0, 0.55)');
+        glossGradient.addColorStop(0.25, 'rgba(255, 255, 255, 0.2)');
+        glossGradient.addColorStop(0.75, 'rgba(255, 255, 255, 0.2)');
+        glossGradient.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+        eqCtx.fillStyle = glossGradient;
+        eqCtx.fillRect(x, y, width, height);
+    };
+
+    let eqStartX = HORIZONTAL_MARGIN;
+    let totalDrawingWidth = eqSectionWidth - (HORIZONTAL_MARGIN * 2);
+
+    if (show10BandVuGrid) {
+        drawBackground();
+        drawGridAndScale();
+        eqStartX = HORIZONTAL_MARGIN + 20;
+        totalDrawingWidth = eqSectionWidth - (HORIZONTAL_MARGIN * 2) - 15;
+    }
+
+    const barWidth = (totalDrawingWidth - (BAR_SPACING * (numBands - 1))) / numBands;
+    for (let i = 0; i < numBands; i++) {
+        const finalVisibleHeight = MINIMUM_BAR_HEIGHT + currentBarHeights[i];
+        const x = eqStartX + i * (barWidth + BAR_SPACING);
+        const y = eqCanvas.height - finalVisibleHeight;
+
+        eqCtx.fillStyle = cachedFillStyle;
+        eqCtx.fillRect(x, y, barWidth, finalVisibleHeight);
+
+        applyGlossEffect(x, y, barWidth, finalVisibleHeight);
+
+        if (showPeakMeter && peakHeights[i] > currentBarHeights[i]) {
+            const peakY = eqCanvas.height - peakHeights[i] - PEAK_BAR_HEIGHT;
+            eqCtx.fillStyle = cachedLedPeakColor;
+            eqCtx.fillRect(x, peakY, barWidth, PEAK_BAR_HEIGHT);
+        }
+    }
+
+    const originalVuBarWidth = (vuMeterSectionWidth - HORIZONTAL_MARGIN - BAR_SPACING) / 2;
+    const vuBarWidth = originalVuBarWidth * 0.70;
+    const totalVuContentWidth = (vuBarWidth * 2) + BAR_SPACING;
+    const totalPadding = vuMeterSectionWidth - totalVuContentWidth;
+    const leftVuX = eqSectionWidth + (totalPadding / 2);
+    const rightVuX = leftVuX + vuBarWidth + BAR_SPACING;
+    const vuGradient = eqCtx.createLinearGradient(0, eqCanvas.height, 0, 0);
+    const green = '#34c759', yellow = '#ffcc00', red = '#ff3b30';
+    vuGradient.addColorStop(0, green); vuGradient.addColorStop(0.5, green); vuGradient.addColorStop(0.8, yellow); vuGradient.addColorStop(1, red);
+
+    const drawVuBar = (x, height) => {
+        const y = eqCanvas.height - height;
+        eqCtx.fillStyle = vuGradient;
+        eqCtx.fillRect(x, y, vuBarWidth, height);
+        
+        applyGlossEffect(x, y, vuBarWidth, height);
+    };
+    drawVuBar(leftVuX, leftVuLevel);
+    drawVuBar(rightVuX, rightVuLevel);
+
+    if (showPeakMeter) {
+        const vuPeakColor = getComputedStyle(document.documentElement).getPropertyValue('--color-5').trim() || '#E6C269';
+        eqCtx.fillStyle = vuPeakColor;
+        const leftPeakY = eqCanvas.height - peakVuLevels[0] - PEAK_BAR_HEIGHT;
+        if (peakVuLevels[0] > 0) eqCtx.fillRect(leftVuX, leftPeakY, vuBarWidth, PEAK_BAR_HEIGHT);
+        const rightPeakY = eqCanvas.height - peakVuLevels[1] - PEAK_BAR_HEIGHT;
+        if (peakVuLevels[1] > 0) eqCtx.fillRect(rightVuX, rightPeakY, vuBarWidth, PEAK_BAR_HEIGHT);
+    }
+
+    if (show10BandVuGrid) {
+        const separatorX = eqSectionWidth;
+        const vuCenterX = eqSectionWidth + (vuMeterSectionWidth / 2);
+        eqCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        eqCtx.fillRect(separatorX - 1, 0, 2, eqCanvas.height);
+        eqCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        eqCtx.fillRect(separatorX, 0, 0.5, eqCanvas.height);
+        eqCtx.font = 'bold 12px Arial';
+        eqCtx.textAlign = 'center';
+        eqCtx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        eqCtx.fillText('VU+', vuCenterX, 12);
+    }
+
+    eqCtx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+    eqCtx.font = 'bold 12px Arial';
+    eqCtx.textAlign = 'center';
+    eqCtx.fillText('L', leftVuX + vuBarWidth / 2, eqCanvas.height - 5);
+    eqCtx.fillText('R', rightVuX + vuBarWidth / 2, eqCanvas.height - 5);
+}
+
+function drawMode10BandVuLed() {
+    const vuMeterSectionWidth = eqCanvas.width * 0.25;
+    const eqSectionWidth = eqCanvas.width - vuMeterSectionWidth;
+    const numBands = 10;
+    const drawBackground = () => {
+        const centerX = eqCanvas.width / 2;
+        const centerY = eqCanvas.height / 2;
+        const backgroundGradient = eqCtx.createRadialGradient(centerX, centerY, 0, centerX, centerY, eqCanvas.width * 0.8);
+        backgroundGradient.addColorStop(0, '#2a2a2a');
+        backgroundGradient.addColorStop(1, '#1a1a1a');
+        eqCtx.fillStyle = backgroundGradient;
+        eqCtx.fillRect(0, 0, eqCanvas.width, eqCanvas.height);
+    };
+
+    const drawGridAndScale = () => {
+        eqCtx.save();
+        eqCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        eqCtx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+        eqCtx.font = 'bold 9px Arial';
+        eqCtx.textAlign = 'left';
+        eqCtx.textBaseline = 'middle';
+        const levels = [0.25, 0.50, 0.75];
+        const labels = ['-18', '-9', '0'];
+        levels.forEach((level, index) => {
+            const y = eqCanvas.height * (1 - level);
+            eqCtx.beginPath();
+            eqCtx.setLineDash([2, 4]);
+            eqCtx.moveTo(25, y);
+            eqCtx.lineTo(eqCanvas.width, y);
+            eqCtx.stroke();
+            eqCtx.fillText(labels[index], 5, y);
+        });
+        eqCtx.strokeStyle = 'rgba(255, 50, 50, 0.2)';
+        eqCtx.beginPath();
+        eqCtx.moveTo(25, 2);
+        eqCtx.lineTo(eqCanvas.width, 2);
+        eqCtx.stroke();
+        eqCtx.fillStyle = 'rgba(255, 50, 50, 0.5)';
+        eqCtx.fillText('PEAK', 5, 6);
+        eqCtx.restore();
+    };
+
+    const applyGlossEffect = (x, y, width, height) => {
+        const glossGradient = eqCtx.createLinearGradient(x, 0, x + width, 0);
+        glossGradient.addColorStop(0, 'rgba(0, 0, 0, 0.55)');
+        glossGradient.addColorStop(0.25, 'rgba(255, 255, 255, 0.2)');
+        glossGradient.addColorStop(0.75, 'rgba(255, 255, 255, 0.2)');
+        glossGradient.addColorStop(1, 'rgba(0, 0, 0, 0.55)');
+        eqCtx.fillStyle = glossGradient;
+        eqCtx.fillRect(x, y, width, height);
+    };
+
+    let eqStartX = HORIZONTAL_MARGIN;
+    let totalDrawingWidth = eqSectionWidth - (HORIZONTAL_MARGIN * 2);
+
+    if (show10BandVuGrid) {
+        drawBackground();
+        drawGridAndScale();
+        eqStartX = HORIZONTAL_MARGIN + 20;
+        totalDrawingWidth = eqSectionWidth - (HORIZONTAL_MARGIN * 2) - 15;
+    }
+
+    const eqBarWidth = (totalDrawingWidth - (BAR_SPACING * (numBands - 1))) / numBands;
+    const totalBlockHeight = eqCanvas.height - (LED_BLOCK_SPACING * (LED_BLOCK_COUNT - 1));
+    const blockHeight = totalBlockHeight / LED_BLOCK_COUNT;
+
+    for (let i = 0; i < numBands; i++) {
+        const x = eqStartX + i * (eqBarWidth + BAR_SPACING);
+        const litBlocks = Math.ceil((currentBarHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT);
+
+        for (let j = 0; j < litBlocks; j++) {
+            const y = eqCanvas.height - (j + 1) * (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
+            eqCtx.fillStyle = cachedLedColors[j] || cachedFillStyle;
+            eqCtx.fillRect(x, y, eqBarWidth, blockHeight);
+            applyGlossEffect(x, y, eqBarWidth, blockHeight);
+        }
+
+        if (showPeakMeter) {
+            const peakBlock = Math.max(1, Math.ceil((peakHeights[i] / eqCanvas.height) * LED_BLOCK_COUNT));
+            if (peakBlock >= litBlocks) {
+                const peakY = eqCanvas.height - peakBlock * (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
+                eqCtx.fillStyle = cachedLedPeakColor;
+                eqCtx.fillRect(x, peakY, eqBarWidth, blockHeight);
+                applyGlossEffect(x, peakY, eqBarWidth, blockHeight);
+            }
+        }
+    }
+
+    const originalVuBarWidth = (vuMeterSectionWidth - HORIZONTAL_MARGIN - BAR_SPACING) / 2;
+    const vuBarWidth = originalVuBarWidth * 0.70;
+    const totalVuContentWidth = (vuBarWidth * 2) + BAR_SPACING;
+    const totalPadding = vuMeterSectionWidth - totalVuContentWidth;
+    const leftVuX = eqSectionWidth + (totalPadding / 2);
+    const rightVuX = leftVuX + vuBarWidth + BAR_SPACING;
+
+    const drawVuBarAsLed = (x, level) => {
+        const litBlocks = Math.ceil((level / eqCanvas.height) * LED_BLOCK_COUNT);
+        for (let j = 0; j < litBlocks; j++) {
+            const y = eqCanvas.height - (j + 1) * (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
+            const percentage = j / LED_BLOCK_COUNT;
+            if (percentage > 0.85) eqCtx.fillStyle = '#ff3b30';
+            else if (percentage > 0.65) eqCtx.fillStyle = '#ffcc00';
+            else eqCtx.fillStyle = '#34c759';
+            eqCtx.fillRect(x, y, vuBarWidth, blockHeight);
+            applyGlossEffect(x, y, vuBarWidth, blockHeight);
+        }
+    };
+
+    drawVuBarAsLed(leftVuX, leftVuLevel);
+    drawVuBarAsLed(rightVuX, rightVuLevel);
+
+    if (showPeakMeter) {
+        const vuPeakColor = getComputedStyle(document.documentElement).getPropertyValue('--color-5').trim() || '#E6C269';
+        const leftPeakBlock = Math.max(1, Math.ceil((peakVuLevels[0] / eqCanvas.height) * LED_BLOCK_COUNT));
+        const rightPeakBlock = Math.max(1, Math.ceil((peakVuLevels[1] / eqCanvas.height) * LED_BLOCK_COUNT));
+        
+        const leftPeakY = eqCanvas.height - leftPeakBlock * (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
+        if (peakVuLevels[0] > 0) {
+            eqCtx.fillStyle = vuPeakColor;
+            eqCtx.fillRect(leftVuX, leftPeakY, vuBarWidth, blockHeight);
+            applyGlossEffect(leftVuX, leftPeakY, vuBarWidth, blockHeight);
+        }
+        
+        const rightPeakY = eqCanvas.height - rightPeakBlock * (blockHeight + LED_BLOCK_SPACING) + LED_BLOCK_SPACING;
+        if (peakVuLevels[1] > 0) {
+            eqCtx.fillStyle = vuPeakColor;
+            eqCtx.fillRect(rightVuX, rightPeakY, vuBarWidth, blockHeight);
+            applyGlossEffect(rightVuX, rightPeakY, vuBarWidth, blockHeight);
+        }
+    }
+
+    if (show10BandVuGrid) {
+        const separatorX = eqSectionWidth;
+        const vuCenterX = eqSectionWidth + (vuMeterSectionWidth / 2);
+        eqCtx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        eqCtx.fillRect(separatorX - 1, 0, 2, eqCanvas.height);
+        eqCtx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        eqCtx.fillRect(separatorX, 0, 0.5, eqCanvas.height);
+        eqCtx.font = 'bold 12px Arial';
+        eqCtx.textAlign = 'center';
+        eqCtx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        eqCtx.fillText('VU+', vuCenterX, 12);
+    }
+
+    eqCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    eqCtx.font = 'bold 12px Arial';
+    eqCtx.textAlign = 'center';
+    eqCtx.fillText('L', leftVuX + vuBarWidth / 2, eqCanvas.height - 5);
+    eqCtx.fillText('R', rightVuX + vuBarWidth / 2, eqCanvas.height - 5);
+}
 })();
