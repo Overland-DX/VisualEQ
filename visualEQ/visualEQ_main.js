@@ -6,7 +6,7 @@
 
 (() => {
     // ===================================================================================
-    // VisualEQ v1.7.0 :: CONFIGURATION
+    // VisualEQ v1.7.1 :: CONFIGURATION
     // ===================================================================================
 
     // -----------------------------------------------------------------------------------
@@ -92,7 +92,7 @@
          VU_METER_CONFIG: {
             // Audio levels below this threshold will be ignored (reduces noise).
             // Recommended: 0.5 to 5.0
-            NOISE_GATE: 1.0,
+            NOISE_GATE: 2.0,
 
             // A general gain applied to the signal before the exponential curve.
             // This acts as the default sensitivity for the VU Meter slider.
@@ -150,7 +150,7 @@
     const SENSITIVITY_MIN = 0.1; // The minimum value for the sensitivity slider.
     const SENSITIVITY_MAX = 1.9; // The maximum value for the sensitivity slider.
 
-    const FALL_SPEED = 120; // How quickly the bars fall (higher value = faster fall).
+    const FALL_SPEED = 80; // How quickly the bars fall (higher value = faster fall).
     const HORIZONTAL_MARGIN = 5; // The space (in pixels) on the left and right edges of the visualizer.
     const BAR_SPACING = 2; // The space (in pixels) between each bar in 'Bars' and 'LED' mode.
     const CORNER_RADIUS = 2; // The corner roundness for 'Bars' mode. Set to 0 for sharp corners.
@@ -229,7 +229,7 @@
 
     // --- Core Audio Processing ---
     const MINIMUM_BAR_HEIGHT = 2; // The minimum visible height of a bar to prevent it from disappearing completely.
-    const NOISE_GATE_THRESHOLD = 1.0; // Audio values below this will be treated as silence. Helps reduce background noise flicker.
+    const NOISE_GATE_THRESHOLD = 0.1; // Audio values below this will be treated as silence. Helps reduce background noise flicker.
 
 
     // =================================================================
@@ -257,7 +257,7 @@
     // A noise gate threshold (0-255) for each band. Audio signals below this value will be ignored.
     // Increase this value for a band if it's flickering or always slightly active on quiet audio.
     const floorLevels_10_bands = [
-        10, 10, 10, 10, 8, 5, 5, 5, 5, 5
+        5, 5, 5, 4, 4, 4, 4, 4, 5, 5
     ];
 
     // --- TUNING FOR 20-BAND MODES ('Bars', 'LED', 'Mirrored Bars', 'Circle') ---
@@ -274,7 +274,7 @@
 
     // Noise gate threshold (0-255) for each of the 20 bands.
 	const floorLevels_20_bands = [
-		20, 25, 20, 20, 20, 18, 15, 12, 10, 8, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5
+		5, 5, 5, 5, 5, 5, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3
 	];
 
     // --- Analyser Quality ---
@@ -287,7 +287,7 @@
     };
 
 
-    const PLUGIN_VERSION = 'v1.7.0';
+    const PLUGIN_VERSION = 'v1.7.1';
     const GITHUB_URL = 'https://github.com/Overland-DX/VisualEQ.git';
 
     let currentFftSize = FFT_SIZES.Medium;
@@ -1653,11 +1653,11 @@ function startOrRestartEQ() {
     channelSplitter = audioContext.createChannelSplitter(2);
 
     analyserLeft = audioContext.createAnalyser();
-    Object.assign(analyserLeft, { fftSize: currentFftSize, smoothingTimeConstant: 0.6 });
+    Object.assign(analyserLeft, { fftSize: currentFftSize, smoothingTimeConstant: 0.85 });
     dataArrayLeft = new Uint8Array(analyserLeft.frequencyBinCount);
 
     analyserRight = audioContext.createAnalyser();
-    Object.assign(analyserRight, { fftSize: currentFftSize, smoothingTimeConstant: 0.6 });
+    Object.assign(analyserRight, { fftSize: currentFftSize, smoothingTimeConstant: 0.85 });
     dataArrayRight = new Uint8Array(analyserRight.frequencyBinCount);
     
     liveAudioPlayer.Amplification.connect(channelSplitter);
@@ -2321,42 +2321,53 @@ function processVuMeterLevels(dataArrayLeft, dataArrayRight) {
     const config = SERVER_OWNER_DEFAULTS.VU_METER_CONFIG;
 
     const binCount = dataArrayLeft.length;
-    const startBin = Math.floor(binCount * 0.01);
-    const endBin = Math.floor(binCount * 0.5);
+    const startBin = Math.floor(binCount * 0.005); 
+    const endBin = Math.floor(binCount * 0.8);
 
-    let sumLeft = 0, sumRight = 0;
+    let maxLeft = 0;
+    let maxRight = 0;
+
     for (let i = startBin; i < endBin; i++) {
-        sumLeft += dataArrayLeft[i];
-        sumRight += dataArrayRight[i];
-    }
-
-    const divisor = endBin - startBin;
-    let levelLeft = sumLeft / divisor;
-    let levelRight = sumRight / divisor;
-
-    const totalLevel = levelLeft + levelRight;
-    if (totalLevel > 1) {
-        const difference = levelLeft - levelRight;
-        const exaggerationFactor = (Math.abs(difference) / totalLevel) * config.STEREO_EXAGGERATION;
-        
-        if (levelLeft > levelRight) {
-            levelLeft *= (1 + exaggerationFactor);
-            levelRight *= (1 - exaggerationFactor);
-        } else {
-            levelRight *= (1 + exaggerationFactor);
-            levelLeft *= (1 - exaggerationFactor);
-        }
+        if (dataArrayLeft[i] > maxLeft) maxLeft = dataArrayLeft[i];
+        if (dataArrayRight[i] > maxRight) maxRight = dataArrayRight[i];
     }
     
-    const applyCurve = (level) => {
-        if (level < config.NOISE_GATE) return 0;
-        let processed = Math.pow(level * vuMeterSensitivity, config.RISE_EXPONENT);
-        return Math.min(processed, 255);
+    const applyDynamicExpansion = (level) => {
+        const noiseFloor = 40; 
+
+        let cleanSignal = level - noiseFloor;
+
+        if (cleanSignal < 0) cleanSignal = 0;
+
+        let normalized = cleanSignal / (255 - noiseFloor);
+
+        let expanded = Math.pow(normalized, 2.5);
+
+        let boosted = expanded * (vuMeterSensitivity * 1.5); 
+
+        return Math.min(boosted * 255, 255);
     };
 
+    let finalLeft = applyDynamicExpansion(maxLeft);
+    let finalRight = applyDynamicExpansion(maxRight);
+
+    if (finalLeft > 0 || finalRight > 0) {
+        const total = finalLeft + finalRight;
+        const diff = finalLeft - finalRight;
+        const factor = (Math.abs(diff) / (total + 1)) * config.STEREO_EXAGGERATION;
+        
+        if (finalLeft > finalRight) {
+            finalLeft *= (1 + factor);
+            finalRight *= (1 - factor);
+        } else {
+            finalRight *= (1 + factor);
+            finalLeft *= (1 - factor);
+        }
+    }
+
     return {
-        left: applyCurve(levelLeft),
-        right: applyCurve(levelRight)
+        left: Math.min(finalLeft, 255),
+        right: Math.min(finalRight, 255)
     };
 }
 
